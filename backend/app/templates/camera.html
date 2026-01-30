@@ -1,0 +1,616 @@
+{% extends "base.html" %}
+
+{% block title %}Camera - Sentinel{% endblock %}
+
+{% block extra_head %}
+<style>
+    .camera-page {
+        display: flex;
+        flex-direction: column;
+        height: calc(100vh - 60px);
+        height: calc(100dvh - 60px);
+        padding: 0;
+        max-width: 100%;
+        margin: 0;
+    }
+
+    .camera-container {
+        position: relative;
+        flex: 1;
+        background: black;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    #videoElement {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    #canvasOverlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+    }
+
+    .camera-controls {
+        background: var(--gray-900);
+        padding: 1rem;
+        padding-bottom: calc(1rem + var(--safe-bottom));
+        display: flex;
+        justify-content: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .camera-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.75rem 1.5rem;
+        border: none;
+        border-radius: 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .camera-btn svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .camera-btn.primary {
+        background: var(--primary);
+        color: white;
+    }
+
+    .camera-btn.primary:hover {
+        background: var(--primary-dark);
+    }
+
+    .camera-btn.primary.active {
+        background: var(--danger);
+    }
+
+    .camera-btn.secondary {
+        background: var(--gray-700);
+        color: white;
+    }
+
+    .camera-btn.secondary:hover {
+        background: var(--gray-600);
+    }
+
+    .camera-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .status-bar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+        padding: 1rem;
+        padding-top: calc(1rem + var(--safe-top));
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: white;
+        font-size: 0.85rem;
+    }
+
+    .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .status-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--gray-500);
+    }
+
+    .status-dot.recording {
+        background: var(--danger);
+        animation: pulse 1s infinite;
+    }
+
+    .status-dot.connected {
+        background: var(--success);
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .stats-overlay {
+        display: flex;
+        gap: 1rem;
+    }
+
+    .stat-item {
+        background: rgba(0,0,0,0.5);
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.75rem;
+    }
+
+    .detection-box {
+        position: absolute;
+        border: 2px solid;
+        border-radius: 4px;
+        pointer-events: none;
+    }
+
+    .detection-box.person {
+        border-color: #22c55e;
+    }
+
+    .detection-box.vehicle {
+        border-color: #3b82f6;
+    }
+
+    .detection-box.face {
+        border-color: #f59e0b;
+    }
+
+    .detection-label {
+        position: absolute;
+        top: -20px;
+        left: 0;
+        background: inherit;
+        color: white;
+        padding: 2px 6px;
+        font-size: 10px;
+        border-radius: 2px;
+        white-space: nowrap;
+    }
+
+    .detection-box.person .detection-label {
+        background: #22c55e;
+    }
+
+    .detection-box.vehicle .detection-label {
+        background: #3b82f6;
+    }
+
+    .detection-box.face .detection-label {
+        background: #f59e0b;
+    }
+
+    .no-camera {
+        color: white;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .no-camera h2 {
+        margin-bottom: 1rem;
+    }
+
+    .no-camera button {
+        margin-top: 1rem;
+    }
+
+    /* Hide bottom nav on camera page */
+    .bottom-nav {
+        display: none !important;
+    }
+
+    @media (min-width: 768px) {
+        .camera-page {
+            height: calc(100vh - 60px);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="camera-page">
+    <div class="camera-container">
+        <video id="videoElement" autoplay playsinline muted></video>
+        <canvas id="canvasOverlay"></canvas>
+
+        <div class="status-bar">
+            <div class="status-indicator">
+                <div class="status-dot" id="statusDot"></div>
+                <span id="statusText">Initializing...</span>
+            </div>
+            <div class="stats-overlay">
+                <div class="stat-item" id="fpsCounter">0 FPS</div>
+                <div class="stat-item" id="detectionCount">0 detections</div>
+            </div>
+        </div>
+
+        <div class="no-camera" id="noCameraMessage" style="display: none;">
+            <h2>Camera Access Required</h2>
+            <p>Please allow camera access to use surveillance mode.</p>
+            <button class="camera-btn primary" onclick="startCamera()">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                Enable Camera
+            </button>
+        </div>
+    </div>
+
+    <div class="camera-controls">
+        <button class="camera-btn primary" id="toggleBtn" onclick="toggleSurveillance()">
+            <svg viewBox="0 0 24 24" fill="currentColor" id="toggleIcon">
+                <path d="M8 5v14l11-7z"/>
+            </svg>
+            <span id="toggleText">Start</span>
+        </button>
+
+        <button class="camera-btn secondary" id="switchBtn" onclick="switchCamera()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 12c0 1.66 1.34 3 3 3s3-1.34 3-3-1.34-3-3-3-3 1.34-3 3zm9.41-2.83L20 7.59V4h-3.59l-1.58 1.59C14 5.21 13.03 5 12 5c-3.92 0-7 3.08-7 7s3.08 7 7 7c1.03 0 2-.21 2.83-.59L16.41 20H20v-3.59l-1.59-1.58c.38-.83.59-1.76.59-2.83 0-1.07-.21-2-.59-2.83z"/>
+            </svg>
+            <span>Switch</span>
+        </button>
+
+        <button class="camera-btn secondary" id="settingsBtn" onclick="toggleSettings()">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+            </svg>
+            <span>Settings</span>
+        </button>
+    </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settingsModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 200; padding: 1rem;">
+    <div style="background: white; border-radius: 1rem; max-width: 400px; margin: 2rem auto; padding: 1.5rem;">
+        <h3 style="margin-bottom: 1rem;">Camera Settings</h3>
+
+        <label style="display: block; margin-bottom: 1rem;">
+            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Processing FPS</span>
+            <select id="fpsSelect" style="width: 100%; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid #ddd;">
+                <option value="1">1 FPS (Low power)</option>
+                <option value="2">2 FPS</option>
+                <option value="5" selected>5 FPS (Recommended)</option>
+                <option value="10">10 FPS</option>
+            </select>
+        </label>
+
+        <label style="display: block; margin-bottom: 1rem;">
+            <span style="display: block; margin-bottom: 0.5rem; font-weight: 500;">Detection Sensitivity</span>
+            <select id="sensitivitySelect" style="width: 100%; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid #ddd;">
+                <option value="0.3">High (more detections)</option>
+                <option value="0.5" selected>Medium</option>
+                <option value="0.7">Low (fewer false positives)</option>
+            </select>
+        </label>
+
+        <label style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem;">
+            <input type="checkbox" id="soundAlerts" checked>
+            <span>Sound alerts for detections</span>
+        </label>
+
+        <div style="display: flex; gap: 0.5rem; margin-top: 1.5rem;">
+            <button onclick="saveSettings()" style="flex: 1; padding: 0.75rem; background: var(--primary); color: white; border: none; border-radius: 0.5rem; font-weight: 500;">Save</button>
+            <button onclick="toggleSettings()" style="flex: 1; padding: 0.75rem; background: #eee; border: none; border-radius: 0.5rem; font-weight: 500;">Cancel</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+class CameraController {
+    constructor() {
+        this.video = document.getElementById('videoElement');
+        this.canvas = document.getElementById('canvasOverlay');
+        this.ctx = this.canvas.getContext('2d');
+        this.statusDot = document.getElementById('statusDot');
+        this.statusText = document.getElementById('statusText');
+        this.fpsCounter = document.getElementById('fpsCounter');
+        this.detectionCount = document.getElementById('detectionCount');
+        this.toggleBtn = document.getElementById('toggleBtn');
+        this.toggleText = document.getElementById('toggleText');
+        this.toggleIcon = document.getElementById('toggleIcon');
+
+        this.stream = null;
+        this.isRunning = false;
+        this.ws = null;
+        this.facingMode = 'environment'; // back camera
+        this.frameInterval = null;
+        this.fps = 5;
+        this.sensitivity = 0.5;
+        this.lastFrameTime = 0;
+        this.frameCount = 0;
+        this.detections = [];
+
+        this.init();
+    }
+
+    async init() {
+        await this.startCamera();
+        this.connectWebSocket();
+        this.resizeCanvas();
+        window.addEventListener('resize', () => this.resizeCanvas());
+    }
+
+    async startCamera() {
+        try {
+            const constraints = {
+                video: {
+                    facingMode: this.facingMode,
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                },
+                audio: false
+            };
+
+            this.stream = await navigator.mediaDevices.getUserMedia(constraints);
+            this.video.srcObject = this.stream;
+
+            document.getElementById('noCameraMessage').style.display = 'none';
+            this.video.style.display = 'block';
+            this.updateStatus('ready', 'Camera ready');
+        } catch (error) {
+            console.error('Camera error:', error);
+            document.getElementById('noCameraMessage').style.display = 'block';
+            this.video.style.display = 'none';
+            this.updateStatus('error', 'Camera unavailable');
+        }
+    }
+
+    async switchCamera() {
+        this.facingMode = this.facingMode === 'environment' ? 'user' : 'environment';
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop());
+        }
+        await this.startCamera();
+    }
+
+    connectWebSocket() {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/camera`;
+
+        try {
+            this.ws = new WebSocket(wsUrl);
+
+            this.ws.onopen = () => {
+                console.log('Camera WebSocket connected');
+                this.updateStatus('connected', 'Connected to server');
+            };
+
+            this.ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                this.handleDetections(data);
+            };
+
+            this.ws.onclose = () => {
+                console.log('Camera WebSocket disconnected');
+                this.updateStatus('disconnected', 'Disconnected');
+                // Reconnect after 3 seconds
+                setTimeout(() => this.connectWebSocket(), 3000);
+            };
+
+            this.ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        } catch (e) {
+            console.error('WebSocket connection failed:', e);
+        }
+    }
+
+    toggleSurveillance() {
+        if (this.isRunning) {
+            this.stop();
+        } else {
+            this.start();
+        }
+    }
+
+    start() {
+        this.isRunning = true;
+        this.toggleBtn.classList.add('active');
+        this.toggleText.textContent = 'Stop';
+        this.toggleIcon.innerHTML = '<rect x="6" y="6" width="12" height="12"/>';
+        this.statusDot.classList.add('recording');
+        this.updateStatus('recording', 'Surveillance active');
+
+        // Start sending frames
+        const intervalMs = 1000 / this.fps;
+        this.frameInterval = setInterval(() => this.captureAndSendFrame(), intervalMs);
+
+        // Start FPS counter
+        this.startFpsCounter();
+    }
+
+    stop() {
+        this.isRunning = false;
+        this.toggleBtn.classList.remove('active');
+        this.toggleText.textContent = 'Start';
+        this.toggleIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
+        this.statusDot.classList.remove('recording');
+        this.updateStatus('ready', 'Camera ready');
+
+        if (this.frameInterval) {
+            clearInterval(this.frameInterval);
+            this.frameInterval = null;
+        }
+
+        // Clear detections
+        this.detections = [];
+        this.drawDetections();
+    }
+
+    captureAndSendFrame() {
+        if (!this.isRunning || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+
+        // Create a temporary canvas to capture frame
+        const tempCanvas = document.createElement('canvas');
+        const scale = 0.5; // Send at half resolution to reduce bandwidth
+        tempCanvas.width = this.video.videoWidth * scale;
+        tempCanvas.height = this.video.videoHeight * scale;
+
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(this.video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+        // Convert to base64 JPEG
+        const frameData = tempCanvas.toDataURL('image/jpeg', 0.7);
+
+        // Send to server
+        this.ws.send(JSON.stringify({
+            type: 'frame',
+            data: frameData,
+            timestamp: Date.now(),
+            width: this.video.videoWidth,
+            height: this.video.videoHeight,
+            sensitivity: this.sensitivity
+        }));
+
+        this.frameCount++;
+    }
+
+    handleDetections(data) {
+        if (data.type === 'detections') {
+            this.detections = data.detections || [];
+            this.detectionCount.textContent = `${this.detections.length} detections`;
+            this.drawDetections();
+
+            // Play sound for new detections
+            if (this.detections.length > 0 && document.getElementById('soundAlerts')?.checked) {
+                this.playAlertSound();
+            }
+        }
+    }
+
+    drawDetections() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        const scaleX = this.canvas.width / this.video.videoWidth;
+        const scaleY = this.canvas.height / this.video.videoHeight;
+
+        for (const det of this.detections) {
+            const x = det.box.x * scaleX;
+            const y = det.box.y * scaleY;
+            const w = det.box.width * scaleX;
+            const h = det.box.height * scaleY;
+
+            // Set color based on type
+            let color;
+            switch (det.type) {
+                case 'person': color = '#22c55e'; break;
+                case 'vehicle': color = '#3b82f6'; break;
+                case 'face': color = '#f59e0b'; break;
+                default: color = '#ffffff';
+            }
+
+            // Draw box
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(x, y, w, h);
+
+            // Draw label
+            const label = `${det.type} ${Math.round(det.confidence * 100)}%`;
+            this.ctx.fillStyle = color;
+            this.ctx.fillRect(x, y - 20, this.ctx.measureText(label).width + 8, 18);
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '12px sans-serif';
+            this.ctx.fillText(label, x + 4, y - 6);
+        }
+    }
+
+    resizeCanvas() {
+        this.canvas.width = this.video.offsetWidth;
+        this.canvas.height = this.video.offsetHeight;
+        this.drawDetections();
+    }
+
+    startFpsCounter() {
+        setInterval(() => {
+            const now = performance.now();
+            const elapsed = now - this.lastFrameTime;
+            const actualFps = Math.round(this.frameCount / (elapsed / 1000));
+            this.fpsCounter.textContent = `${actualFps} FPS`;
+            this.frameCount = 0;
+            this.lastFrameTime = now;
+        }, 1000);
+    }
+
+    updateStatus(state, text) {
+        this.statusText.textContent = text;
+        this.statusDot.className = 'status-dot';
+        if (state === 'recording') {
+            this.statusDot.classList.add('recording');
+        } else if (state === 'connected' || state === 'ready') {
+            this.statusDot.classList.add('connected');
+        }
+    }
+
+    playAlertSound() {
+        // Create a simple beep
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const oscillator = audioCtx.createOscillator();
+        const gainNode = audioCtx.createGain();
+
+        oscillator.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+
+        oscillator.frequency.value = 800;
+        oscillator.type = 'sine';
+        gainNode.gain.value = 0.1;
+
+        oscillator.start();
+        oscillator.stop(audioCtx.currentTime + 0.1);
+    }
+
+    setFps(fps) {
+        this.fps = parseInt(fps);
+        if (this.isRunning) {
+            this.stop();
+            this.start();
+        }
+    }
+
+    setSensitivity(sensitivity) {
+        this.sensitivity = parseFloat(sensitivity);
+    }
+}
+
+let camera;
+
+document.addEventListener('DOMContentLoaded', () => {
+    camera = new CameraController();
+});
+
+function startCamera() {
+    camera.startCamera();
+}
+
+function toggleSurveillance() {
+    camera.toggleSurveillance();
+}
+
+function switchCamera() {
+    camera.switchCamera();
+}
+
+function toggleSettings() {
+    const modal = document.getElementById('settingsModal');
+    modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
+}
+
+function saveSettings() {
+    camera.setFps(document.getElementById('fpsSelect').value);
+    camera.setSensitivity(document.getElementById('sensitivitySelect').value);
+    toggleSettings();
+}
+</script>
+{% endblock %}

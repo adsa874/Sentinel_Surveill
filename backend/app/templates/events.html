@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Events Log - Sentinel{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Events Log</h1>
+    <p class="subtitle">{{ total_events }} total events</p>
+</div>
+
+<div class="filters">
+    <form method="get" class="filter-form">
+        <label for="event_type">Filter by Type:</label>
+        <select id="event_type" name="event_type" onchange="this.form.submit()">
+            <option value="">All Events</option>
+            {% for type in event_types %}
+            <option value="{{ type }}" {% if type == selected_type %}selected{% endif %}>
+                {{ type.replace('_', ' ') }}
+            </option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+
+<section class="section">
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Event Type</th>
+                    <th>Details</th>
+                    <th>Duration</th>
+                    <th>Device</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in events %}
+                <tr>
+                    <td>{{ event.date }}</td>
+                    <td>{{ event.time }}</td>
+                    <td>
+                        <span class="event-badge event-{{ event.event_type.lower().replace('_', '-') }}">
+                            {{ event.event_type.replace('_', ' ') }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if event.employee_name %}
+                            {{ event.employee_name }}
+                        {% elif event.license_plate %}
+                            {{ event.license_plate }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ event.duration if event.duration else '-' }}</td>
+                    <td class="device-id">{{ event.device_id[:8] if event.device_id else '-' }}...</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-state">No events found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if total_pages > 1 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="?page={{ page - 1 }}{% if selected_type %}&event_type={{ selected_type }}{% endif %}" class="page-link">&laquo; Previous</a>
+    {% endif %}
+
+    <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+    <a href="?page={{ page + 1 }}{% if selected_type %}&event_type={{ selected_type }}{% endif %}" class="page-link">Next &raquo;</a>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

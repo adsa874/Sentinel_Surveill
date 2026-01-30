@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Devices - Sentinel{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Devices</h1>
+    <p class="subtitle">{{ online_count }} online / {{ total_devices }} total</p>
+</div>
+
+<section class="section">
+    <div class="devices-grid">
+        {% for device in devices %}
+        <div class="device-card {% if device.is_online %}online{% elif not device.is_active %}inactive{% endif %}">
+            <div class="device-status">
+                <span class="status-indicator {% if device.is_online %}online{% elif device.is_active %}offline{% else %}inactive{% endif %}"></span>
+                {% if device.is_online %}
+                    Online
+                {% elif device.is_active %}
+                    Offline
+                {% else %}
+                    Inactive
+                {% endif %}
+            </div>
+            <h3 class="device-name">{{ device.device_name }}</h3>
+            <div class="device-details">
+                <p><strong>Model:</strong> {{ device.model }}</p>
+                <p><strong>OS:</strong> {{ device.os_version }}</p>
+                <p><strong>ID:</strong> <span class="device-id">{{ device.device_id[:12] }}...</span></p>
+                <p><strong>Last Seen:</strong>
+                    {% if device.last_seen_date %}
+                        {{ device.last_seen_date }} {{ device.last_seen }}
+                    {% else %}
+                        Never
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+        {% else %}
+        <div class="empty-state-card">
+            <p>No devices registered</p>
+            <p class="hint">Devices will appear here once they connect to the system</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

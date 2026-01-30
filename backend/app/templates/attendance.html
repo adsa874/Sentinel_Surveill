@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance - Sentinel{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Employee Attendance</h1>
+    <p class="date">{{ formatted_date }}</p>
+</div>
+
+<div class="filters">
+    <form method="get" class="filter-form">
+        <label for="date">Select Date:</label>
+        <input type="date" id="date" name="date" value="{{ date }}" onchange="this.form.submit()">
+    </form>
+</div>
+
+<section class="section">
+    <h2>Present Today ({{ attendance|length }})</h2>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Employee ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Check In</th>
+                    <th>Check Out</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for record in attendance %}
+                <tr>
+                    <td>{{ record.employee_id }}</td>
+                    <td>{{ record.employee_name }}</td>
+                    <td>{{ record.department or '-' }}</td>
+                    <td>{{ record.check_in }}</td>
+                    <td>{{ record.check_out }}</td>
+                    <td>{{ record.duration }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="empty-state">No attendance records for this date</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+{% if absent_employees %}
+<section class="section">
+    <h2>Absent Today ({{ absent_employees|length }})</h2>
+    <div class="table-container">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Employee ID</th>
+                    <th>Name</th>
+                    <th>Department</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for emp in absent_employees %}
+                <tr class="absent-row">
+                    <td>{{ emp.id }}</td>
+                    <td>{{ emp.name }}</td>
+                    <td>{{ emp.department or '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+{% endblock %}

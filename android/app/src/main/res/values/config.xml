@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backend server URL - CHANGE THIS to your deployed server URL -->
+    <!-- Examples:
+         - Local network: http://192.168.1.100:8000
+         - Railway: https://sentinel-production-xxxx.up.railway.app
+         - Render: https://sentinel.onrender.com
+    -->
+    <string name="backend_url">http://10.0.2.2:8000</string>
+</resources>

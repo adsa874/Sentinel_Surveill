@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Sentinel{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Security Dashboard</h1>
+    <p class="date">{{ current_date }}</p>
+</div>
+
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value" data-stat="total-events">{{ stats.total_events }}</div>
+        <div class="stat-label">Events Today</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" data-stat="people-detected">{{ stats.people_detected }}</div>
+        <div class="stat-label">People Detected</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" data-stat="vehicles-detected">{{ stats.vehicles_detected }}</div>
+        <div class="stat-label">Vehicles Detected</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" data-stat="employees-present">{{ stats.employees_present }}</div>
+        <div class="stat-label">Employees Present</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value" data-stat="active-devices">{{ stats.active_devices }}</div>
+        <div class="stat-label">Active Devices</div>
+    </div>
+</div>
+
+<section class="section">
+    <h2>Recent Events</h2>
+    <div class="table-container">
+        <table class="data-table events-table">
+            <thead>
+                <tr>
+                    <th>Time</th>
+                    <th>Event Type</th>
+                    <th>Details</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for event in recent_events %}
+                <tr>
+                    <td>{{ event.formatted_time }}</td>
+                    <td>
+                        <span class="event-badge event-{{ event.event_type.lower().replace('_', '-') }}">
+                            {{ event.event_type.replace('_', ' ') }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if event.employee_name %}
+                            {{ event.employee_name }}
+                        {% elif event.license_plate %}
+                            {{ event.license_plate }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ event.duration if event.duration else '-' }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="empty-state">No events recorded today</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
