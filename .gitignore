@@ -17,3 +17,12 @@ __pycache__/
 # Environment
 .env
 .env.local
+
+# Firebase
+.firebase/
+
+# APK artifacts (built by CI)
+public/*.apk
+
+# Database
+*.db

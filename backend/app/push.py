@@ -19,9 +19,9 @@ settings = get_settings()
 # Store for push subscriptions (in production, use database)
 push_subscriptions: Dict[str, Dict[str, Any]] = {}
 
-# VAPID keys path
-VAPID_PRIVATE_KEY_PATH = Path("vapid_private.pem")
-VAPID_PUBLIC_KEY_PATH = Path("vapid_public.txt")
+# VAPID keys path (use /tmp for Cloud Run compatibility)
+VAPID_PRIVATE_KEY_PATH = Path("/tmp/vapid_private.pem")
+VAPID_PUBLIC_KEY_PATH = Path("/tmp/vapid_public.txt")
 
 
 def generate_vapid_keys():

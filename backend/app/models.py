@@ -55,7 +55,7 @@ class Event(Base):
     license_plate = Column(String(20))
     duration = Column(Integer, default=0)  # Duration in milliseconds
     confidence = Column(Float, default=0.0)
-    metadata = Column(Text)  # JSON-encoded additional data
+    extra_data = Column(Text)  # JSON-encoded additional data
     created_at = Column(Integer, default=lambda: int(datetime.now().timestamp()))
 
     device = relationship("Device", back_populates="events")
