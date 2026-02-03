@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Sentinel</string>
-    <string name="backend_url">https://sentinel-backend-543286698167.us-central1.run.app</string>
 </resources>

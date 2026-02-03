@@ -6,5 +6,5 @@
          - Railway: https://sentinel-production-xxxx.up.railway.app
          - Render: https://sentinel.onrender.com
     -->
-    <string name="backend_url">http://10.0.2.2:8000</string>
+    <string name="backend_url">https://sentinel-backend-543286698167.us-central1.run.app</string>
 </resources>
