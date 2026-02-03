@@ -134,11 +134,12 @@ class FaceProcessor(private val context: Context) {
 
     private fun calculateConfidence(result: FaceLandmarkerResult): Float {
         // Use presence confidence if available
-        return result.faceBlendshapes()
-            .firstOrNull()
-            ?.firstOrNull()
-            ?.score()
-            ?: 0.8f
+        val blendshapes = result.faceBlendshapes()
+        return if (blendshapes.isPresent && blendshapes.get().isNotEmpty()) {
+            blendshapes.get().firstOrNull()?.firstOrNull()?.score() ?: 0.8f
+        } else {
+            0.8f
+        }
     }
 
     fun matchFace(embedding1: FloatArray, embedding2: FloatArray): Float {
