@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sentinel - Download</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0a0a0a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      color: #888;
+      margin-bottom: 2rem;
+    }
+    .download-btn {
+      display: inline-block;
+      padding: 1rem 2.5rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      text-decoration: none;
+      border-radius: 50px;
+      font-size: 1.1rem;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
+    }
+    .instructions {
+      margin-top: 2rem;
+      color: #666;
+      font-size: 0.9rem;
+      max-width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .instructions li {
+      margin: 0.5rem 0;
+      text-align: left;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Sentinel</h1>
+    <p class="subtitle">Edge-First Surveillance System</p>
+    <a href="sentinel.apk" class="download-btn">Download APK</a>
+    <ol class="instructions">
+      <li>Tap Download above</li>
+      <li>Open the downloaded file</li>
+      <li>Enable "Install unknown apps" if prompted</li>
+      <li>Install and grant permissions</li>
+    </ol>
+  </div>
+</body>
+</html>

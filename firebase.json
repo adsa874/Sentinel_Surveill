@@ -1,0 +1,13 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [{
+      "source": "**/*.apk",
+      "headers": [{
+        "key": "Content-Type",
+        "value": "application/vnd.android.package-archive"
+      }]
+    }]
+  }
+}

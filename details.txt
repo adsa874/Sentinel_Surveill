@@ -1,0 +1,353 @@
+Below is a **clean, founder-to-founder PRD**—tight, technical, non-bureaucratic—written so that someone like **Tobi Lütke** can immediately see *what to build, what not to build, and why this matters*.
+
+---
+
+# PRD — Edge-First Location Intelligence & Security System
+
+**Working name:** Sentinel (placeholder)
+**Author:** Aditya Saboo
+**Audience:** Principal engineer / founder-builder
+**Status:** MVP exploration → near-term implementation
+**Philosophy:** Ship a real system that runs 24/7 in the physical world
+
+---
+
+## 1. Problem Statement
+
+Most “security” systems either:
+
+* Record everything but understand nothing, or
+* Require expensive, closed hardware and vendor lock-in
+
+At the same time, smartphones are:
+
+* Powerful edge compute devices
+* Cheap, ubiquitous, and replaceable
+* Already deployed in factories, sites, offices, and properties
+
+**The gap:**
+There is no simple, software-defined system that turns *any Android phone* into a **persistent, intelligent vantage point** that:
+
+* Understands who and what passes through a location
+* Recognizes recurring individuals
+* Tracks vehicles and number plates
+* Logs meaningful events instead of raw footage
+
+---
+
+## 2. Product Vision
+
+A **downloadable Android binary** (no app store dependency) that:
+
+* Runs 24/7 on a plugged-in phone
+* Observes a fixed physical scene
+* Performs continuous, on-device AI analysis
+* Converts reality into **structured events**
+* Enables attendance, security, and operational intelligence
+
+**Mental model:**
+
+> A software-defined security camera with memory.
+
+---
+
+## 3. Non-Goals (Explicit)
+
+To keep the MVP sharp, we are **not** building:
+
+* A consumer app
+* Cloud video streaming
+* iOS support
+* Facial emotion analysis
+* Public identity search
+* Heavy UI / configuration screens
+* App Store compliance flows
+
+This is **industrial software**, not a marketplace app.
+
+---
+
+## 4. Target Deployment Environments
+
+* Construction sites
+* Factories & workshops
+* Office entrances
+* Resorts / hospitality back-of-house
+* Warehouses
+* Gated properties
+
+Assumption:
+
+* Device is **fixed in place**
+* Device is **always plugged in**
+* Device is **owned by the operator**
+
+---
+
+## 5. Core Functional Requirements
+
+### 5.1 Installation & Execution
+
+* Delivered as a **sideloadable APK**
+* Installed directly from a website or internal link
+* Runs as a **foreground service**
+* Automatically restarts on reboot
+* Explicitly disables OS battery optimizations
+
+**Success criteria:**
+Once installed, the phone behaves like an appliance.
+
+---
+
+### 5.2 Continuous Visual Perception (Edge)
+
+The system must continuously process camera input and maintain internal state.
+
+#### Detect:
+
+* Humans
+* Vehicles (cars, bikes, trucks)
+
+#### Track:
+
+* Unique individuals across frames
+* Unique vehicles across frames
+
+Tracking must prevent duplicate counting and allow duration measurement.
+
+---
+
+### 5.3 Face Recognition (Employees)
+
+The system must support **closed-set face recognition**.
+
+#### Enrollment
+
+* Admin enrolls employees locally or via backend
+* Multiple face samples per employee
+* Store **face embeddings**, not raw images
+
+#### Recognition
+
+* Identify enrolled employees when they appear
+* Log:
+
+  * First seen
+  * Last seen
+  * Total presence duration
+
+**Primary use case:**
+Attendance & access logging.
+
+---
+
+### 5.4 Person Re-Identification (Non-Employees)
+
+For all other individuals:
+
+* Assign anonymous, persistent IDs
+* Recognize the *same person returning later*
+* No naming or identity resolution required
+
+This enables:
+
+* Loitering detection
+* Repeat visits
+* Pattern recognition
+
+---
+
+### 5.5 Vehicle & Number Plate Recognition
+
+* Detect vehicles
+* Attempt license plate detection
+* OCR plate numbers where possible
+* Track vehicle presence duration
+
+Accuracy is **best-effort**, not mission-critical in MVP.
+
+---
+
+## 6. Event-First System Design (Key Principle)
+
+The system does **not** think in video.
+
+It thinks in **events**.
+
+### Example Events
+
+* Person entered scene
+* Person exited scene
+* Same person returned after X minutes
+* Employee first entry of day
+* Vehicle stopped for longer than threshold
+* Unusual activity window
+
+Each event is:
+
+* Timestamped
+* Attributed
+* Stored
+* Queryable
+
+Raw video is secondary and optional.
+
+---
+
+## 7. AI & Technical Architecture
+
+### 7.1 On-Device (Primary Intelligence)
+
+Runs continuously on the phone:
+
+* Object detection (people, vehicles)
+* Face detection
+* Face embedding generation
+* Tracking (people & vehicles)
+* Temporary state & buffers
+
+Design principle:
+
+> The phone should still be useful even if the network is down.
+
+---
+
+### 7.2 Backend (Secondary Intelligence)
+
+* Receives event streams
+* Stores logs
+* Aggregates attendance
+* Enables dashboards & alerts
+* Optional LLM-based summarization
+
+The backend **never** needs raw video for core functionality.
+
+---
+
+## 8. Data Model (Conceptual)
+
+### Person (Anonymous)
+
+* internal_id
+* first_seen
+* last_seen
+* visit_count
+
+### Employee
+
+* employee_id
+* face_embeddings[]
+* attendance_records[]
+
+### Vehicle
+
+* internal_id
+* plate_text (optional)
+* confidence
+* durations
+
+### Event
+
+* type
+* subject_id
+* timestamp
+* metadata
+
+---
+
+## 9. Performance Requirements (MVP)
+
+* Must run **24/7 without crashing**
+* Thermal throttling handled gracefully
+* Frame sampling acceptable (not every frame)
+* False positives acceptable within reason
+* Deterministic behavior preferred over cleverness
+
+Reliability > novelty.
+
+---
+
+## 10. Configuration Philosophy
+
+Minimal configuration.
+
+* Fixed camera
+* Fixed scene
+* Sensible defaults
+* Optional remote config later
+
+The system should “just work” once installed.
+
+---
+
+## 11. Security & Trust Model (Pragmatic)
+
+* System is deployed by owner
+* No adversarial threat model in MVP
+* No consumer trust UI required
+* Assume physical control of device
+
+This is **infrastructure software**, not social software.
+
+---
+
+## 12. Why This Is Interesting (Founder Context)
+
+* Turns commodity hardware into infrastructure
+* Edge-first, not cloud-first
+* Avoids App Store economics entirely
+* Strong real-world feedback loops
+* Naturally extensible into:
+
+  * Attendance systems
+  * Security
+  * Operations analytics
+  * Smart city primitives
+
+This is a **real-world systems problem**, not a UI problem.
+
+---
+
+## 13. MVP Definition of “Done”
+
+The MVP is successful if:
+
+* A phone can be mounted, plugged in, and forgotten
+* It logs people, vehicles, and attendance accurately enough
+* The same individual can be recognized across time
+* Daily summaries can be generated from event logs
+* The system runs for weeks without intervention
+
+---
+
+## 14. Open Questions (Intentionally Left)
+
+* Centralized vs fully local identity matching
+* Long-term embedding retention strategy
+* Hardware standardization
+* Multi-camera correlation
+
+These are **Phase 2 problems**.
+
+---
+
+## 15. Closing Note to Implementer
+
+This product should feel less like an “app” and more like:
+
+* Firmware
+* Infrastructure
+* A daemon that observes reality
+
+If done right, this becomes a **primitive** others can build on.
+
+---
+
+If you want, next I can:
+
+* Rewrite this as a **one-page founder memo**
+* Produce a **technical architecture diagram**
+* Define **exact model choices & thresholds**
+* Draft a **v0 dashboard spec**
+
+Just tell me the next artifact you want.
