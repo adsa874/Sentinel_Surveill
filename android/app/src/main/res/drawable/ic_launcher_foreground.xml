@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Eye/Surveillance icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,35C40.5,35 28.7,42.6 24,54C28.7,65.4 40.5,73 54,73C67.5,73 79.3,65.4 84,54C79.3,42.6 67.5,35 54,35ZM54,67C46.8,67 41,61.2 41,54C41,46.8 46.8,41 54,41C61.2,41 67,46.8 67,54C67,61.2 61.2,67 54,67ZM54,46C49.6,46 46,49.6 46,54C46,58.4 49.6,62 54,62C58.4,62 62,58.4 62,54C62,49.6 58.4,46 54,46Z"/>
+</vector>
