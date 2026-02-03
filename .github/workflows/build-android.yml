@@ -56,3 +56,18 @@ jobs:
           name: sentinel-release-apk
           path: android/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
+
+      - name: Copy APK to public folder for Firebase
+        run: |
+          mkdir -p public
+          cp android/app/build/outputs/apk/debug/app-debug.apk public/sentinel.apk
+
+      - name: Deploy to Firebase Hosting
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: sentinel-surv-15464
+          channelId: live
+        continue-on-error: true
