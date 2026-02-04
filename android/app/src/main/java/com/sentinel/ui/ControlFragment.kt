@@ -104,13 +104,15 @@ class ControlFragment : Fragment() {
 
     private fun observeStats() {
         viewLifecycleOwner.lifecycleScope.launch {
-            database.eventDao().getTodayEventCount().collectLatest { count ->
+            val startOfDay = com.sentinel.data.dao.EventDao.getTodayStartMillis()
+            database.eventDao().getTodayEventCount(startOfDay).collectLatest { count ->
                 binding.tvStatEvents.text = count.toString()
             }
         }
 
         viewLifecycleOwner.lifecycleScope.launch {
-            database.personDao().getRecentPersonCount().collectLatest { count ->
+            val since = System.currentTimeMillis() - 24 * 60 * 60 * 1000
+            database.personDao().getRecentPersonCount(since).collectLatest { count ->
                 binding.tvStatPeople.text = count.toString()
             }
         }

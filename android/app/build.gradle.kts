@@ -55,6 +55,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
+    implementation("androidx.viewpager2:viewpager2:1.0.0")
+    implementation("androidx.cardview:cardview:1.0.0")
+    implementation("androidx.fragment:fragment-ktx:1.6.2")
 
     // CameraX
     val cameraxVersion = "1.3.1"

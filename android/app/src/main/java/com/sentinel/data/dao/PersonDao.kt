@@ -19,7 +19,7 @@ interface PersonDao {
     fun getRecentPersons(limit: Int = 50): Flow<List<PersonEntity>>
 
     @Query("SELECT COUNT(*) FROM persons WHERE lastSeen > :since")
-    fun getRecentPersonCount(since: Long = System.currentTimeMillis() - 24 * 60 * 60 * 1000): Flow<Int>
+    fun getRecentPersonCount(since: Long): Flow<Int>
 
     @Query("SELECT * FROM persons WHERE employeeId IS NULL AND faceEmbedding IS NOT NULL")
     suspend fun getUnidentifiedPersons(): List<PersonEntity>

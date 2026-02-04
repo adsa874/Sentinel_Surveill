@@ -22,7 +22,7 @@ interface EventDao {
     suspend fun markAsSynced(ids: List<Long>)
 
     @Query("SELECT COUNT(*) FROM events WHERE timestamp > :startOfDay")
-    fun getTodayEventCount(startOfDay: Long = getTodayStartMillis()): Flow<Int>
+    fun getTodayEventCount(startOfDay: Long): Flow<Int>
 
     @Query("SELECT * FROM events WHERE type = :type AND timestamp BETWEEN :start AND :end")
     suspend fun getEventsByTypeAndTimeRange(type: String, start: Long, end: Long): List<EventEntity>
