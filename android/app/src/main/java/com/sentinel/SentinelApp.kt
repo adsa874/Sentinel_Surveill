@@ -22,12 +22,15 @@ class SentinelApp : Application() {
     }
 
     private fun scheduleSyncWorker() {
-        try {
-            SyncWorker.schedule(this)
-            Log.i(TAG, "Sync worker scheduled")
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to schedule sync worker", e)
-        }
+        // Delay sync worker to avoid crash on app startup
+        android.os.Handler(mainLooper).postDelayed({
+            try {
+                SyncWorker.schedule(this)
+                Log.i(TAG, "Sync worker scheduled")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to schedule sync worker", e)
+            }
+        }, 3000)
     }
 
     private fun configureBackendUrl() {
