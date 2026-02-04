@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.util.Log
+import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.sentinel.data.AppDatabase
 import com.sentinel.network.SentinelApi
@@ -18,17 +19,18 @@ class SentinelApp : Application() {
         super.onCreate()
         instance = this
 
-        // Initialize Crashlytics (delayed to avoid startup crash)
+        // Initialize Firebase manually (delayed to avoid startup crash on older devices)
         android.os.Handler(mainLooper).postDelayed({
             try {
+                FirebaseApp.initializeApp(this)
                 FirebaseCrashlytics.getInstance().apply {
                     setCrashlyticsCollectionEnabled(true)
                     setCustomKey("device", "${Build.MANUFACTURER} ${Build.MODEL}")
                     setCustomKey("os_version", Build.VERSION.RELEASE)
                 }
-                Log.i(TAG, "Crashlytics initialized")
+                Log.i(TAG, "Firebase & Crashlytics initialized")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize Crashlytics", e)
+                Log.e(TAG, "Failed to initialize Firebase", e)
             }
         }, 2000)
 

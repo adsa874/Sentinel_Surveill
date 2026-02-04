@@ -63,6 +63,12 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Disable Firebase auto-init to prevent crash on older devices -->
+        <provider
+            android:name="com.google.firebase.provider.FirebaseInitProvider"
+            android:authorities="${applicationId}.firebaseinitprovider"
+            tools:node="remove" />
+
     </application>
 
 </manifest>
