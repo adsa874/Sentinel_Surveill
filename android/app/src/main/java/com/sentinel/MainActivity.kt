@@ -3,16 +3,19 @@ package com.sentinel
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.sentinel.data.AppDatabase
 import com.sentinel.databinding.ActivityMainBinding
 import com.sentinel.service.SentinelService
+import com.sentinel.update.AppUpdater
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -20,6 +23,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private val database by lazy { AppDatabase.getInstance(this) }
+    private val appUpdater by lazy { AppUpdater(this) }
 
     private val requiredPermissions = buildList {
         add(Manifest.permission.CAMERA)
@@ -57,7 +61,72 @@ class MainActivity : AppCompatActivity() {
             stopSurveillanceService()
         }
 
+        binding.btnDashboard.setOnClickListener {
+            openDashboard()
+        }
+
+        binding.btnCheckUpdate.setOnClickListener {
+            checkForUpdates()
+        }
+
+        binding.tvVersion.text = "Version ${BuildConfig.VERSION_NAME}"
+
         updateServiceStatus()
+    }
+
+    private fun openDashboard() {
+        val dashboardUrl = getString(R.string.backend_url)
+        if (dashboardUrl.isNotBlank()) {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(dashboardUrl))
+            startActivity(intent)
+        } else {
+            Toast.makeText(this, "Dashboard URL not configured", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun checkForUpdates() {
+        binding.btnCheckUpdate.isEnabled = false
+        binding.btnCheckUpdate.text = "Checking..."
+
+        lifecycleScope.launch {
+            val updateInfo = appUpdater.checkForUpdate()
+
+            binding.btnCheckUpdate.isEnabled = true
+            binding.btnCheckUpdate.text = "Check for Updates"
+
+            if (updateInfo != null) {
+                showUpdateDialog(updateInfo)
+            } else {
+                Toast.makeText(this@MainActivity, "You're on the latest version", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showUpdateDialog(updateInfo: com.sentinel.update.UpdateInfo) {
+        AlertDialog.Builder(this)
+            .setTitle("Update Available")
+            .setMessage("Version ${updateInfo.versionName} is available.\n\n${updateInfo.releaseNotes}")
+            .setPositiveButton("Update Now") { _, _ ->
+                appUpdater.downloadAndInstall(
+                    updateInfo,
+                    onProgress = { progress ->
+                        // Could show progress here
+                    },
+                    onComplete = {
+                        Toast.makeText(this, "Download complete. Installing...", Toast.LENGTH_SHORT).show()
+                    },
+                    onError = { error ->
+                        Toast.makeText(this, "Update failed: $error", Toast.LENGTH_LONG).show()
+                        // Fallback to browser
+                        appUpdater.openDownloadPage()
+                    }
+                )
+            }
+            .setNegativeButton("Later", null)
+            .setNeutralButton("Download Page") { _, _ ->
+                appUpdater.openDownloadPage()
+            }
+            .show()
     }
 
     private fun observeStats() {
