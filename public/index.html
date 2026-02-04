@@ -88,6 +88,19 @@
       margin: 0.5rem 0;
       text-align: left;
     }
+    .refresh-btn {
+      background: none;
+      border: none;
+      color: #666;
+      font-size: 0.75rem;
+      cursor: pointer;
+      margin-top: 1.5rem;
+      padding: 0.5rem 1rem;
+      transition: color 0.2s;
+    }
+    .refresh-btn:hover {
+      color: #888;
+    }
   </style>
 </head>
 <body>
@@ -106,9 +119,10 @@
       <li>Enable "Install unknown apps" if prompted</li>
       <li>Install and grant permissions</li>
     </ol>
+    <button class="refresh-btn" onclick="location.reload(true)">Refresh page</button>
   </div>
   <script>
-    fetch('version.json')
+    fetch('version.json?t=' + Date.now())
       .then(r => r.json())
       .then(data => {
         document.getElementById('version').textContent = 'v' + data.versionName;
