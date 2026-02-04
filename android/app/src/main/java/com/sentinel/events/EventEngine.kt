@@ -7,6 +7,8 @@ import com.sentinel.ml.FaceProcessor
 import com.sentinel.tracking.ObjectType
 import com.sentinel.tracking.TrackState
 import com.sentinel.tracking.TrackedObject
+import com.sentinel.ui.ActivityEvent
+import com.sentinel.ui.DetectionEventManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -204,6 +206,50 @@ class EventEngine(
     private fun queueEvent(event: Event) {
         synchronized(eventQueue) {
             eventQueue.add(event)
+        }
+
+        // Emit to UI activity feed
+        scope.launch {
+            val activityEvent = when (event.type) {
+                EventType.PERSON_ENTERED -> ActivityEvent(
+                    type = ActivityEvent.EventType.DETECTION_START,
+                    label = "Person",
+                    confidence = 0f
+                )
+                EventType.PERSON_EXITED -> ActivityEvent(
+                    type = ActivityEvent.EventType.DETECTION_END,
+                    label = "Person",
+                    duration = event.duration
+                )
+                EventType.EMPLOYEE_ARRIVED -> ActivityEvent(
+                    type = ActivityEvent.EventType.FACE_RECOGNIZED,
+                    label = event.employeeId ?: "Employee"
+                )
+                EventType.EMPLOYEE_DEPARTED -> ActivityEvent(
+                    type = ActivityEvent.EventType.DETECTION_END,
+                    label = event.employeeId ?: "Employee",
+                    duration = event.duration
+                )
+                EventType.UNKNOWN_FACE_DETECTED -> ActivityEvent(
+                    type = ActivityEvent.EventType.FACE_UNKNOWN,
+                    label = "Unknown person"
+                )
+                EventType.VEHICLE_ENTERED -> ActivityEvent(
+                    type = ActivityEvent.EventType.DETECTION_START,
+                    label = event.metadata?.get("vehicleType") as? String ?: "Vehicle"
+                )
+                EventType.VEHICLE_EXITED -> ActivityEvent(
+                    type = ActivityEvent.EventType.DETECTION_END,
+                    label = "Vehicle",
+                    duration = event.duration
+                )
+                EventType.LOITERING_DETECTED -> ActivityEvent(
+                    type = ActivityEvent.EventType.LOITERING,
+                    label = "Person loitering",
+                    duration = event.duration
+                )
+            }
+            DetectionEventManager.addEvent(activityEvent)
         }
     }
 

@@ -1,183 +1,89 @@
 package com.sentinel
 
-import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
+import android.animation.ObjectAnimator
+import android.animation.PropertyValuesHolder
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
+import android.view.View
+import android.view.animation.AccelerateDecelerateInterpolator
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.sentinel.data.AppDatabase
+import com.google.android.material.tabs.TabLayoutMediator
 import com.sentinel.databinding.ActivityMainBinding
-import com.sentinel.service.SentinelService
-import com.sentinel.update.AppUpdater
+import com.sentinel.ui.DetectionEventManager
+import com.sentinel.ui.MainPagerAdapter
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val database by lazy { AppDatabase.getInstance(this) }
-    private val appUpdater by lazy { AppUpdater(this) }
-
-    private val requiredPermissions = buildList {
-        add(Manifest.permission.CAMERA)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }.toTypedArray()
-
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val allGranted = permissions.all { it.value }
-        if (allGranted) {
-            startSurveillanceService()
-        } else {
-            Toast.makeText(this, "Camera permission required for surveillance", Toast.LENGTH_LONG).show()
-        }
-    }
+    private var pulseAnimator: ObjectAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupUI()
-        observeStats()
+        setupToolbar()
+        setupViewPager()
+        observeDetections()
     }
 
-    private fun setupUI() {
-        binding.btnStartService.setOnClickListener {
-            checkPermissionsAndStart()
-        }
-
-        binding.btnStopService.setOnClickListener {
-            stopSurveillanceService()
-        }
-
-        binding.btnDashboard.setOnClickListener {
-            openDashboard()
-        }
-
-        binding.btnCheckUpdate.setOnClickListener {
-            checkForUpdates()
-        }
-
-        binding.tvVersion.text = "Version ${BuildConfig.VERSION_NAME}"
-
-        updateServiceStatus()
+    private fun setupToolbar() {
+        setSupportActionBar(binding.toolbar)
     }
 
-    private fun openDashboard() {
-        val dashboardUrl = getString(R.string.backend_url)
-        if (dashboardUrl.isNotBlank()) {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(dashboardUrl))
-            startActivity(intent)
-        } else {
-            Toast.makeText(this, "Dashboard URL not configured", Toast.LENGTH_SHORT).show()
-        }
+    private fun setupViewPager() {
+        val adapter = MainPagerAdapter(this)
+        binding.viewPager.adapter = adapter
+
+        TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
+            tab.text = MainPagerAdapter.TAB_TITLES[position]
+        }.attach()
+
+        // Start on Control tab
+        binding.viewPager.setCurrentItem(2, false)
     }
 
-    private fun checkForUpdates() {
-        binding.btnCheckUpdate.isEnabled = false
-        binding.btnCheckUpdate.text = "Checking..."
-
+    private fun observeDetections() {
         lifecycleScope.launch {
-            val updateInfo = appUpdater.checkForUpdate()
-
-            binding.btnCheckUpdate.isEnabled = true
-            binding.btnCheckUpdate.text = "Check for Updates"
-
-            if (updateInfo != null) {
-                showUpdateDialog(updateInfo)
-            } else {
-                Toast.makeText(this@MainActivity, "You're on the latest version", Toast.LENGTH_SHORT).show()
+            DetectionEventManager.activeCount.collectLatest { count ->
+                if (count > 0) {
+                    showPulseIndicator()
+                } else {
+                    hidePulseIndicator()
+                }
             }
         }
     }
 
-    private fun showUpdateDialog(updateInfo: com.sentinel.update.UpdateInfo) {
-        AlertDialog.Builder(this)
-            .setTitle("Update Available")
-            .setMessage("Version ${updateInfo.versionName} is available.\n\n${updateInfo.releaseNotes}")
-            .setPositiveButton("Update Now") { _, _ ->
-                appUpdater.downloadAndInstall(
-                    updateInfo,
-                    onProgress = { progress ->
-                        // Could show progress here
-                    },
-                    onComplete = {
-                        Toast.makeText(this, "Download complete. Installing...", Toast.LENGTH_SHORT).show()
-                    },
-                    onError = { error ->
-                        Toast.makeText(this, "Update failed: $error", Toast.LENGTH_LONG).show()
-                        // Fallback to browser
-                        appUpdater.openDownloadPage()
-                    }
-                )
-            }
-            .setNegativeButton("Later", null)
-            .setNeutralButton("Download Page") { _, _ ->
-                appUpdater.openDownloadPage()
-            }
-            .show()
-    }
+    private fun showPulseIndicator() {
+        binding.pulseIndicator.visibility = View.VISIBLE
 
-    private fun observeStats() {
-        lifecycleScope.launch {
-            database.eventDao().getTodayEventCount().collectLatest { count ->
-                binding.tvEventCount.text = "Events Today: $count"
-            }
-        }
+        if (pulseAnimator == null || !pulseAnimator!!.isRunning) {
+            val scaleX = PropertyValuesHolder.ofFloat(View.SCALE_X, 1f, 1.3f, 1f)
+            val scaleY = PropertyValuesHolder.ofFloat(View.SCALE_Y, 1f, 1.3f, 1f)
+            val alpha = PropertyValuesHolder.ofFloat(View.ALPHA, 1f, 0.7f, 1f)
 
-        lifecycleScope.launch {
-            database.personDao().getRecentPersonCount().collectLatest { count ->
-                binding.tvPersonCount.text = "People Detected: $count"
+            pulseAnimator = ObjectAnimator.ofPropertyValuesHolder(
+                binding.pulseIndicator, scaleX, scaleY, alpha
+            ).apply {
+                duration = 1000
+                repeatCount = ObjectAnimator.INFINITE
+                interpolator = AccelerateDecelerateInterpolator()
+                start()
             }
         }
     }
 
-    private fun checkPermissionsAndStart() {
-        val missingPermissions = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isEmpty()) {
-            startSurveillanceService()
-        } else {
-            permissionLauncher.launch(missingPermissions.toTypedArray())
-        }
+    private fun hidePulseIndicator() {
+        pulseAnimator?.cancel()
+        pulseAnimator = null
+        binding.pulseIndicator.visibility = View.INVISIBLE
     }
 
-    private fun startSurveillanceService() {
-        val intent = Intent(this, SentinelService::class.java)
-        ContextCompat.startForegroundService(this, intent)
-        updateServiceStatus()
-        Toast.makeText(this, "Surveillance started", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun stopSurveillanceService() {
-        val intent = Intent(this, SentinelService::class.java)
-        stopService(intent)
-        updateServiceStatus()
-        Toast.makeText(this, "Surveillance stopped", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun updateServiceStatus() {
-        val isRunning = SentinelService.isRunning
-        binding.tvStatus.text = if (isRunning) "Status: ACTIVE" else "Status: INACTIVE"
-        binding.btnStartService.isEnabled = !isRunning
-        binding.btnStopService.isEnabled = isRunning
-    }
-
-    override fun onResume() {
-        super.onResume()
-        updateServiceStatus()
+    override fun onDestroy() {
+        super.onDestroy()
+        pulseAnimator?.cancel()
     }
 }

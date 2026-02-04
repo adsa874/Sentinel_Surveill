@@ -12,6 +12,10 @@ import com.sentinel.events.EventEngine
 import com.sentinel.tracking.DetectedObject
 import com.sentinel.tracking.MultiObjectTracker
 import com.sentinel.tracking.ObjectType
+import com.sentinel.ui.DetectionEventManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class DetectionPipeline(
     private val context: Context,
@@ -60,7 +64,12 @@ class DetectionPipeline(
         }
     }
 
+    private val uiScope = CoroutineScope(Dispatchers.Main)
+    private var lastFpsUpdate = 0L
+    private var frameCount = 0
+
     fun processFrame(bitmap: Bitmap, timestamp: Long) {
+        val startTime = System.currentTimeMillis()
         val detectedObjects = mutableListOf<DetectedObject>()
 
         // Run object detection
@@ -80,6 +89,51 @@ class DetectionPipeline(
 
         // Generate events from tracked objects
         eventEngine.processTrackedObjects(trackedObjects, timestamp)
+
+        // Update UI with detections
+        val inferenceTime = System.currentTimeMillis() - startTime
+        updateUI(detectedObjects, bitmap.width, bitmap.height, inferenceTime)
+    }
+
+    private fun updateUI(detections: List<DetectedObject>, width: Int, height: Int, inferenceTime: Long) {
+        // Convert DetectedObject to Detection for UI
+        val uiDetections = detections.map { obj ->
+            Detection(
+                label = when (obj.type) {
+                    ObjectType.PERSON -> "Person"
+                    ObjectType.VEHICLE -> obj.vehicleType?.replaceFirstChar { it.uppercase() } ?: "Vehicle"
+                    else -> "Unknown"
+                },
+                confidence = obj.confidence,
+                boundingBox = obj.boundingBox,
+                trackId = obj.trackId
+            )
+        }
+
+        // Update detection overlay
+        DetectionEventManager.previewWidth = width
+        DetectionEventManager.previewHeight = height
+        DetectionEventManager.updateDetections(uiDetections)
+
+        // Update FPS
+        frameCount++
+        val now = System.currentTimeMillis()
+        if (now - lastFpsUpdate >= 1000) {
+            val fps = frameCount * 1000f / (now - lastFpsUpdate)
+            DetectionEventManager.updateStats(fps, inferenceTime)
+            frameCount = 0
+            lastFpsUpdate = now
+        }
+
+        // Emit new detection events for activity feed
+        uiScope.launch {
+            for (detection in uiDetections) {
+                if (detection.trackId >= 0) {
+                    // Only emit for new tracks (this is simplified - in production
+                    // you'd track which IDs have already been announced)
+                }
+            }
+        }
     }
 
     private fun processObjectDetectionResults(
