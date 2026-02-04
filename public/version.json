@@ -1,6 +1,6 @@
 {
-  "versionCode": 4,
-  "versionName": "1.2.1",
+  "versionCode": 5,
+  "versionName": "1.2.2",
   "downloadUrl": "https://sentinel-surv-15464.web.app/sentinel.apk",
-  "releaseNotes": "Fixed backend sync - events now properly sync to cloud. New tabbed UI with live preview and activity feed."
+  "releaseNotes": "Added crash reporting for better debugging. Fixed startup crash on older devices."
 }
