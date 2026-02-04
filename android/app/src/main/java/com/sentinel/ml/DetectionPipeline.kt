@@ -105,8 +105,8 @@ class DetectionPipeline(
                     else -> "Unknown"
                 },
                 confidence = obj.confidence,
-                boundingBox = obj.boundingBox,
-                trackId = obj.trackId
+                boundingBox = obj.boundingBox
+                // trackId is assigned by the tracker, not available on DetectedObject
             )
         }
 
