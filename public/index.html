@@ -28,7 +28,17 @@
     }
     .subtitle {
       color: #888;
-      margin-bottom: 2rem;
+      margin-bottom: 0.5rem;
+    }
+    .version-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      background: rgba(102, 126, 234, 0.2);
+      border: 1px solid rgba(102, 126, 234, 0.4);
+      border-radius: 20px;
+      font-size: 0.85rem;
+      color: #667eea;
+      margin-bottom: 1.5rem;
     }
     .download-btn {
       display: inline-block;
@@ -45,8 +55,29 @@
       transform: translateY(-2px);
       box-shadow: 0 10px 40px rgba(102, 126, 234, 0.4);
     }
+    .release-notes {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      max-width: 320px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .release-notes h3 {
+      font-size: 0.8rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .release-notes p {
+      font-size: 0.9rem;
+      color: #aaa;
+      line-height: 1.4;
+    }
     .instructions {
-      margin-top: 2rem;
+      margin-top: 1.5rem;
       color: #666;
       font-size: 0.9rem;
       max-width: 300px;
@@ -63,7 +94,12 @@
   <div class="container">
     <h1>Sentinel</h1>
     <p class="subtitle">Edge-First Surveillance System</p>
+    <div class="version-badge" id="version">Loading...</div>
     <a href="sentinel.apk" class="download-btn">Download APK</a>
+    <div class="release-notes">
+      <h3>Release Notes</h3>
+      <p id="release-notes">Loading...</p>
+    </div>
     <ol class="instructions">
       <li>Tap Download above</li>
       <li>Open the downloaded file</li>
@@ -71,5 +107,17 @@
       <li>Install and grant permissions</li>
     </ol>
   </div>
+  <script>
+    fetch('version.json')
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('version').textContent = 'v' + data.versionName;
+        document.getElementById('release-notes').textContent = data.releaseNotes;
+      })
+      .catch(() => {
+        document.getElementById('version').textContent = 'v1.0.0';
+        document.getElementById('release-notes').textContent = 'Latest release';
+      });
+  </script>
 </body>
 </html>
