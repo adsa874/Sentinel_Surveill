@@ -1,6 +1,6 @@
 {
-  "versionCode": 2,
-  "versionName": "1.1.0",
+  "versionCode": 3,
+  "versionName": "1.2.0",
   "downloadUrl": "https://sentinel-surv-15464.web.app/sentinel.apk",
-  "releaseNotes": "New tabbed UI with live camera preview, real-time activity feed, detection overlays, and stats dashboard."
+  "releaseNotes": "Fixed backend sync - events now properly sync to cloud. New tabbed UI with live preview and activity feed."
 }
