@@ -19,6 +19,7 @@ import com.sentinel.camera.CameraManager
 import com.sentinel.data.AppDatabase
 import com.sentinel.events.EventEngine
 import com.sentinel.ml.DetectionPipeline
+import com.sentinel.network.SyncWorker
 import com.sentinel.tracking.MultiObjectTracker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,6 +123,9 @@ class SentinelService : LifecycleService() {
         if (wakeLock.isHeld) {
             wakeLock.release()
         }
+
+        // Sync events to backend when stopping
+        SyncWorker.syncNow(this)
 
         isRunning = false
     }

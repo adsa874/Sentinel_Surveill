@@ -7,6 +7,7 @@ import android.os.Build
 import android.util.Log
 import com.sentinel.data.AppDatabase
 import com.sentinel.network.SentinelApi
+import com.sentinel.network.SyncWorker
 
 class SentinelApp : Application() {
 
@@ -17,6 +18,16 @@ class SentinelApp : Application() {
         instance = this
         configureBackendUrl()
         createNotificationChannels()
+        scheduleSyncWorker()
+    }
+
+    private fun scheduleSyncWorker() {
+        try {
+            SyncWorker.schedule(this)
+            Log.i(TAG, "Sync worker scheduled")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to schedule sync worker", e)
+        }
     }
 
     private fun configureBackendUrl() {
