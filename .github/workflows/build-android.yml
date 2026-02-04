@@ -5,6 +5,7 @@ on:
     branches: [master, main]
     paths:
       - 'android/**'
+      - 'public/**'
       - '.github/workflows/build-android.yml'
   workflow_dispatch:  # Allow manual trigger
 
@@ -59,4 +60,3 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: sentinel-surv-15464
           channelId: live
-        continue-on-error: true
