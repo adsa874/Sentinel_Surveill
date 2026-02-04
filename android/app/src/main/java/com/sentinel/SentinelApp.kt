@@ -18,13 +18,19 @@ class SentinelApp : Application() {
         super.onCreate()
         instance = this
 
-        // Initialize Crashlytics
-        FirebaseCrashlytics.getInstance().apply {
-            setCrashlyticsCollectionEnabled(true)
-            setCustomKey("device", "${Build.MANUFACTURER} ${Build.MODEL}")
-            setCustomKey("os_version", Build.VERSION.RELEASE)
-        }
-        Log.i(TAG, "Crashlytics initialized")
+        // Initialize Crashlytics (delayed to avoid startup crash)
+        android.os.Handler(mainLooper).postDelayed({
+            try {
+                FirebaseCrashlytics.getInstance().apply {
+                    setCrashlyticsCollectionEnabled(true)
+                    setCustomKey("device", "${Build.MANUFACTURER} ${Build.MODEL}")
+                    setCustomKey("os_version", Build.VERSION.RELEASE)
+                }
+                Log.i(TAG, "Crashlytics initialized")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize Crashlytics", e)
+            }
+        }, 2000)
 
         configureBackendUrl()
         createNotificationChannels()
