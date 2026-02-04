@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "543286698167",
+    "project_id": "sentinel-surv-15464",
+    "storage_bucket": "sentinel-surv-15464.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:543286698167:android:6e061a3e468c66a8d52d32",
+        "android_client_info": {
+          "package_name": "com.sentinel"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyBSv8kudP-5hKUajLwxld8qruiRhX6z0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

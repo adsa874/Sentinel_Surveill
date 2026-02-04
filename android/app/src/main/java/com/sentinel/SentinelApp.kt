@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.util.Log
+import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.sentinel.data.AppDatabase
 import com.sentinel.network.SentinelApi
 import com.sentinel.network.SyncWorker
@@ -16,6 +17,15 @@ class SentinelApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        // Initialize Crashlytics
+        FirebaseCrashlytics.getInstance().apply {
+            setCrashlyticsCollectionEnabled(true)
+            setCustomKey("device", "${Build.MANUFACTURER} ${Build.MODEL}")
+            setCustomKey("os_version", Build.VERSION.RELEASE)
+        }
+        Log.i(TAG, "Crashlytics initialized")
+
         configureBackendUrl()
         createNotificationChannels()
         scheduleSyncWorker()
