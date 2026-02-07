@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Sentinel Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="header">
+        <h1>Sentinel</h1>
+        <div class="status">
+            <span class="status-dot"></span>
+            <span id="statusText">Connecting...</span>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Live Stream -->
+        <div class="stream-card">
+            <img id="mjpegStream" src="/stream/mjpeg" alt="Live Feed">
+            <div class="stream-label">
+                <span class="status-dot"></span>
+                LIVE
+            </div>
+        </div>
+
+        <!-- Stats Row -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value" id="statFps">--</div>
+                <div class="stat-label">FPS</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statActive">--</div>
+                <div class="stat-label">Active Objects</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statInference">--</div>
+                <div class="stat-label">Inference (ms)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statEvents">--</div>
+                <div class="stat-label">Events Today</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tab-bar">
+            <div class="tab active" data-tab="events">Events</div>
+            <div class="tab" data-tab="employees">Employees</div>
+            <div class="tab" data-tab="vehicles">Vehicles</div>
+            <div class="tab" data-tab="attendance">Attendance</div>
+        </div>
+
+        <div class="tab-content">
+            <!-- Events Tab -->
+            <div class="tab-pane active" id="tab-events">
+                <ul class="event-list" id="eventList">
+                    <li class="empty-state">Waiting for events...</li>
+                </ul>
+            </div>
+
+            <!-- Employees Tab -->
+            <div class="tab-pane" id="tab-employees">
+                <div id="employeesContent">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Vehicles Tab -->
+            <div class="tab-pane" id="tab-vehicles">
+                <div id="vehiclesContent">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Attendance Tab -->
+            <div class="tab-pane" id="tab-attendance">
+                <div id="attendanceContent">
+                    <div class="empty-state">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <a href="/camera">Open Browser Camera</a> &middot;
+        Sentinel v1.3.1
+    </div>
+
+    <script src="/app.js"></script>
+</body>
+</html>

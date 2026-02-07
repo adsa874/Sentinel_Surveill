@@ -20,6 +20,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.sentinel.BuildConfig
 import com.sentinel.R
+import com.sentinel.SentinelApp
 import com.sentinel.data.AppDatabase
 import com.sentinel.databinding.FragmentControlBinding
 import com.sentinel.service.SentinelService
@@ -131,10 +132,11 @@ class ControlFragment : Fragment() {
     }
 
     private fun startSurveillanceService() {
+        SentinelApp.setServiceEnabled(requireContext(), true)
         val intent = Intent(requireContext(), SentinelService::class.java)
         ContextCompat.startForegroundService(requireContext(), intent)
         serviceStartTime = System.currentTimeMillis()
-        updateServiceStatus()
+        setServiceUi(running = true)
 
         viewLifecycleOwner.lifecycleScope.launch {
             DetectionEventManager.onSystemEvent("Surveillance started")
@@ -144,9 +146,11 @@ class ControlFragment : Fragment() {
     }
 
     private fun stopSurveillanceService() {
+        SentinelApp.setServiceEnabled(requireContext(), false)
         val intent = Intent(requireContext(), SentinelService::class.java)
         requireContext().stopService(intent)
-        updateServiceStatus()
+        SentinelService.isRunning = false
+        setServiceUi(running = false)
 
         viewLifecycleOwner.lifecycleScope.launch {
             DetectionEventManager.onSystemEvent("Surveillance stopped")
@@ -156,19 +160,21 @@ class ControlFragment : Fragment() {
     }
 
     private fun updateServiceStatus() {
-        val isRunning = SentinelService.isRunning
+        setServiceUi(SentinelService.isRunning)
+    }
 
-        binding.tvStatus.text = if (isRunning) "ACTIVE" else "INACTIVE"
-        binding.tvStatus.setTextColor(if (isRunning) Color.parseColor("#4CAF50") else Color.GRAY)
+    private fun setServiceUi(running: Boolean) {
+        binding.tvStatus.text = if (running) "ACTIVE" else "INACTIVE"
+        binding.tvStatus.setTextColor(if (running) Color.parseColor("#4CAF50") else Color.GRAY)
 
         binding.statusIndicator.setBackgroundResource(
-            if (isRunning) R.drawable.bg_pulse_indicator else R.drawable.bg_confidence_badge
+            if (running) R.drawable.bg_pulse_indicator else R.drawable.bg_confidence_badge
         )
 
-        binding.btnStartService.isEnabled = !isRunning
-        binding.btnStopService.isEnabled = isRunning
+        binding.btnStartService.isEnabled = !running
+        binding.btnStopService.isEnabled = running
 
-        if (isRunning) {
+        if (running) {
             if (serviceStartTime == 0L) {
                 serviceStartTime = System.currentTimeMillis()
             }

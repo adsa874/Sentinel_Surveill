@@ -14,8 +14,8 @@ android {
         applicationId = "com.sentinel"
         minSdk = 26
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.2.5"
+        versionCode = 10
+        versionName = "1.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,6 +46,10 @@ android {
         viewBinding = true
         buildConfig = true
     }
+
+    aaptOptions {
+        noCompress += "tflite"
+    }
 }
 
 dependencies {
@@ -71,6 +75,9 @@ dependencies {
     // MediaPipe
     implementation("com.google.mediapipe:tasks-vision:0.10.9")
 
+    // TensorFlow Lite (for MobileFaceNet)
+    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+
     // ML Kit Text Recognition (for license plates)
     implementation("com.google.mlkit:text-recognition:16.0.0")
 
@@ -86,11 +93,19 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:$retrofitVersion")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
+    // NanoHTTPD embedded web server
+    implementation("org.nanohttpd:nanohttpd:2.3.1")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // WorkManager for background sync
     implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Security - Encryption
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("net.zetetic:android-database-sqlcipher:4.5.4")
+    implementation("androidx.sqlite:sqlite-ktx:2.4.0")
 
     // Firebase Crashlytics
     implementation(platform("com.google.firebase:firebase-bom:32.7.0"))

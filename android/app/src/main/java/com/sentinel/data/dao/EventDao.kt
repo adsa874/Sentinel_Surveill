@@ -33,6 +33,12 @@ interface EventDao {
     @Query("DELETE FROM events WHERE timestamp < :before")
     suspend fun deleteOldEvents(before: Long)
 
+    @Query("DELETE FROM events WHERE synced = 1 AND timestamp < :before")
+    suspend fun deleteSyncedEventsBefore(before: Long)
+
+    @Query("SELECT * FROM events ORDER BY timestamp DESC LIMIT :limit")
+    suspend fun getRecentEventsSync(limit: Int = 50): List<EventEntity>
+
     @Query("DELETE FROM events")
     suspend fun deleteAll()
 

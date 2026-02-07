@@ -1,15 +1,21 @@
 package com.sentinel
 
+import android.app.AlarmManager
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.crashlytics.FirebaseCrashlytics
 import com.sentinel.data.AppDatabase
 import com.sentinel.network.SentinelApi
 import com.sentinel.network.SyncWorker
+import com.sentinel.service.CrashRestartReceiver
 
 class SentinelApp : Application() {
 
@@ -18,6 +24,8 @@ class SentinelApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+
+        installCrashHandler()
 
         // Initialize Firebase manually (delayed to avoid startup crash on older devices)
         android.os.Handler(mainLooper).postDelayed({
@@ -94,13 +102,54 @@ class SentinelApp : Application() {
         }
     }
 
+    private fun installCrashHandler() {
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                Log.e(TAG, "Uncaught exception, scheduling restart", throwable)
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                    .putLong("crash_timestamp", System.currentTimeMillis())
+                    .apply()
+
+                if (isServiceEnabled(this)) {
+                    val intent = Intent(this, CrashRestartReceiver::class.java)
+                    val pendingIntent = PendingIntent.getBroadcast(
+                        this, 0, intent,
+                        PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+                    )
+                    val alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+                    alarmManager.set(
+                        AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                        SystemClock.elapsedRealtime() + 3000,
+                        pendingIntent
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to schedule crash restart", e)
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+    }
+
     companion object {
         private const val TAG = "SentinelApp"
+        private const val PREFS_NAME = "sentinel_prefs"
         const val CHANNEL_SURVEILLANCE = "sentinel_surveillance"
         const val CHANNEL_ALERTS = "sentinel_alerts"
         const val NOTIFICATION_ID_SERVICE = 1
 
         lateinit var instance: SentinelApp
             private set
+
+        fun isServiceEnabled(context: Context): Boolean {
+            return context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                .getBoolean("service_enabled", false)
+        }
+
+        fun setServiceEnabled(context: Context, enabled: Boolean) {
+            context.getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .putBoolean("service_enabled", enabled)
+                .apply()
+        }
     }
 }

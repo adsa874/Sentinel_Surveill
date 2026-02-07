@@ -35,6 +35,9 @@ interface AttendanceDao {
     """)
     suspend fun recordCheckOut(employeeId: String, date: String, checkOutTime: Long)
 
+    @Query("SELECT * FROM attendance WHERE date = :date ORDER BY checkInTime ASC")
+    suspend fun getAttendanceForDateSync(date: String): List<AttendanceEntity>
+
     @Query("DELETE FROM attendance WHERE date < :before")
     suspend fun deleteOldRecords(before: String)
 }

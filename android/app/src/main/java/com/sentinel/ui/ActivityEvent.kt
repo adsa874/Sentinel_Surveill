@@ -1,7 +1,5 @@
 package com.sentinel.ui
 
-import android.graphics.Bitmap
-
 data class ActivityEvent(
     val id: Long = System.currentTimeMillis(),
     val timestamp: Long = System.currentTimeMillis(),
@@ -9,7 +7,7 @@ data class ActivityEvent(
     val label: String,
     val confidence: Float = 0f,
     val duration: Long = 0,
-    val thumbnail: Bitmap? = null,
+    val snapshotPath: String? = null,
     val details: String? = null
 ) {
     enum class EventType {

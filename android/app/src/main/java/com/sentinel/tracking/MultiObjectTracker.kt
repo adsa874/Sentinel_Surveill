@@ -66,11 +66,18 @@ class MultiObjectTracker {
     private val activeTracks = mutableMapOf<Int, TrackedObject>()
     private val exitedTracks = mutableListOf<TrackedObject>()
     private val trackIdCounter = AtomicInteger(0)
+    private val lock = Any()
 
-    fun update(detections: List<DetectedObject>, timestamp: Long): List<TrackedObject> {
-        // Match detections to existing tracks using IoU
-        val matched = mutableSetOf<Int>()
-        val unmatchedDetections = mutableListOf<DetectedObject>()
+    // Reusable collections cleared at start of each update() to avoid per-frame allocation
+    private val matched = mutableSetOf<Int>()
+    private val unmatchedDetections = mutableListOf<DetectedObject>()
+    private val tracksToRemove = mutableListOf<Int>()
+
+    fun update(detections: List<DetectedObject>, timestamp: Long): List<TrackedObject> = synchronized(lock) {
+        // Clear reusable collections
+        matched.clear()
+        unmatchedDetections.clear()
+        tracksToRemove.clear()
 
         for (detection in detections) {
             var bestMatch: TrackedObject? = null
@@ -114,7 +121,6 @@ class MultiObjectTracker {
         }
 
         // Handle lost tracks
-        val tracksToRemove = mutableListOf<Int>()
         for ((trackId, track) in activeTracks) {
             if (trackId !in matched) {
                 track.framesLost++
@@ -146,11 +152,44 @@ class MultiObjectTracker {
             activeTracks[newTrackId] = newTrack
         }
 
+        // Cap active tracks at MAX_ACTIVE_TRACKS
+        if (activeTracks.size > MAX_ACTIVE_TRACKS) {
+            val lostTracks = activeTracks.entries
+                .filter { it.value.state == TrackState.LOST }
+                .sortedBy { it.value.lastSeenTime }
+
+            val trackedTracks = activeTracks.entries
+                .filter { it.value.state != TrackState.LOST }
+                .sortedBy { it.value.lastSeenTime }
+
+            val toEvict = (lostTracks + trackedTracks)
+                .take(activeTracks.size - MAX_ACTIVE_TRACKS)
+
+            for (entry in toEvict) {
+                entry.value.state = TrackState.EXITED
+                exitedTracks.add(entry.value)
+                activeTracks.remove(entry.key)
+            }
+        }
+
+        // Cap exitedTracks to prevent unbounded growth
+        while (exitedTracks.size > MAX_EXITED_TRACKS) {
+            exitedTracks.removeAt(0)
+        }
+
         // Return all current and recently exited tracks
         val result = activeTracks.values.toList() + exitedTracks
         exitedTracks.clear()
 
         return result
+    }
+
+    fun updatePlate(trackId: Int, plate: String) = synchronized(lock) {
+        activeTracks[trackId]?.let {
+            if (it.licensePlate == null) {
+                it.licensePlate = plate
+            }
+        }
     }
 
     private fun calculateIoU(box1: RectF, box2: RectF): Float {
@@ -172,11 +211,11 @@ class MultiObjectTracker {
         return if (unionArea > 0) intersectionArea / unionArea else 0f
     }
 
-    fun getActiveTracks(): List<TrackedObject> = activeTracks.values.toList()
+    fun getActiveTracks(): List<TrackedObject> = synchronized(lock) { activeTracks.values.toList() }
 
-    fun getTrackById(trackId: Int): TrackedObject? = activeTracks[trackId]
+    fun getTrackById(trackId: Int): TrackedObject? = synchronized(lock) { activeTracks[trackId] }
 
-    fun clear() {
+    fun clear() = synchronized(lock) {
         activeTracks.clear()
         exitedTracks.clear()
     }
@@ -184,5 +223,7 @@ class MultiObjectTracker {
     companion object {
         private const val IOU_THRESHOLD = 0.3f
         private const val MAX_FRAMES_LOST = 15
+        private const val MAX_ACTIVE_TRACKS = 50
+        private const val MAX_EXITED_TRACKS = 20
     }
 }

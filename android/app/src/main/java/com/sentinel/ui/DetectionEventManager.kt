@@ -1,6 +1,5 @@
 package com.sentinel.ui
 
-import android.graphics.Bitmap
 import com.sentinel.ml.Detection
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +18,7 @@ object DetectionEventManager {
     val currentDetections: StateFlow<List<Detection>> = _currentDetections.asStateFlow()
 
     // Activity events (for feed)
-    private val _activityEvents = MutableSharedFlow<ActivityEvent>(replay = 100, extraBufferCapacity = 50)
+    private val _activityEvents = MutableSharedFlow<ActivityEvent>(replay = 10, extraBufferCapacity = 20)
     val activityEvents: SharedFlow<ActivityEvent> = _activityEvents.asSharedFlow()
 
     // Stats
@@ -38,7 +37,7 @@ object DetectionEventManager {
 
     // Recent events list (in-memory)
     private val recentEvents = mutableListOf<ActivityEvent>()
-    private const val MAX_RECENT_EVENTS = 500
+    private const val MAX_RECENT_EVENTS = 50
 
     fun updateDetections(detections: List<Detection>) {
         _currentDetections.value = detections
@@ -51,27 +50,28 @@ object DetectionEventManager {
     }
 
     suspend fun addEvent(event: ActivityEvent) {
-        recentEvents.add(0, event)
-        if (recentEvents.size > MAX_RECENT_EVENTS) {
-            recentEvents.removeAt(recentEvents.lastIndex)
+        synchronized(recentEvents) {
+            recentEvents.add(0, event)
+            if (recentEvents.size > MAX_RECENT_EVENTS) {
+                recentEvents.removeAt(recentEvents.lastIndex)
+            }
         }
         _activityEvents.emit(event)
     }
 
-    fun getRecentEvents(): List<ActivityEvent> = recentEvents.toList()
+    fun getRecentEvents(): List<ActivityEvent> = synchronized(recentEvents) { recentEvents.toList() }
 
     fun clearEvents() {
-        recentEvents.clear()
+        synchronized(recentEvents) { recentEvents.clear() }
     }
 
     // Helper to create detection events
-    suspend fun onDetectionStart(label: String, confidence: Float, thumbnail: Bitmap? = null) {
+    suspend fun onDetectionStart(label: String, confidence: Float) {
         addEvent(
             ActivityEvent(
                 type = ActivityEvent.EventType.DETECTION_START,
                 label = label,
-                confidence = confidence,
-                thumbnail = thumbnail
+                confidence = confidence
             )
         )
     }

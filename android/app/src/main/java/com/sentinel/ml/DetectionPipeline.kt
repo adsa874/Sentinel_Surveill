@@ -16,6 +16,11 @@ import com.sentinel.ui.DetectionEventManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.io.ByteArrayOutputStream
 
 class DetectionPipeline(
     private val context: Context,
@@ -25,6 +30,22 @@ class DetectionPipeline(
     private var objectDetector: ObjectDetector? = null
     private var faceProcessor: FaceProcessor? = null
     private var plateReader: PlateReader? = null
+
+    // Frame counter for skipping expensive operations
+    private var detectionFrameCount = 0
+
+    // Expose latest frame as pre-compressed JPEG bytes for MJPEG streaming
+    private val _currentFrameBytes = MutableStateFlow<ByteArray?>(null)
+    val currentFrameBytes: StateFlow<ByteArray?> = _currentFrameBytes.asStateFlow()
+
+    // Reusable JPEG compression buffer
+    private val jpegBuffer = ByteArrayOutputStream(64 * 1024)
+
+    // Self-healing: timestamp of last detector re-init attempt
+    private var lastReinitAttempt = 0L
+
+    // Uptime tracking
+    val startTime: Long = System.currentTimeMillis()
 
     init {
         initializeDetectors()
@@ -65,12 +86,23 @@ class DetectionPipeline(
     }
 
     private val uiScope = CoroutineScope(Dispatchers.Main)
+    private val ioScope = CoroutineScope(Dispatchers.IO)
     private var lastFpsUpdate = 0L
     private var frameCount = 0
 
     fun processFrame(bitmap: Bitmap, timestamp: Long) {
         val startTime = System.currentTimeMillis()
         val detectedObjects = mutableListOf<DetectedObject>()
+        detectionFrameCount++
+
+        // Self-healing: retry initialization of failed detectors every 60s
+        reinitializeFailedDetectors()
+
+        // Compress bitmap to JPEG once, reuse for both MJPEG streaming and event snapshots
+        jpegBuffer.reset()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, 80, jpegBuffer)
+        val frameBytes = jpegBuffer.toByteArray()
+        _currentFrameBytes.value = frameBytes
 
         // Run object detection
         objectDetector?.let { detector ->
@@ -87,12 +119,84 @@ class DetectionPipeline(
         // Update tracker with new detections
         val trackedObjects = tracker.update(detectedObjects, timestamp)
 
+        // Provide current frame JPEG for evidence capture
+        eventEngine.setCurrentFrameJpeg(frameBytes)
+
         // Generate events from tracked objects
         eventEngine.processTrackedObjects(trackedObjects, timestamp)
 
         // Update UI with detections
         val inferenceTime = System.currentTimeMillis() - startTime
         updateUI(detectedObjects, bitmap.width, bitmap.height, inferenceTime)
+    }
+
+    private fun reinitializeFailedDetectors() {
+        val now = System.currentTimeMillis()
+        if (now - lastReinitAttempt < 60_000L) return
+
+        if (objectDetector == null) {
+            lastReinitAttempt = now
+            try {
+                val baseOptions = BaseOptions.builder()
+                    .setModelAssetPath("efficientdet_lite0.tflite")
+                    .build()
+                val options = ObjectDetector.ObjectDetectorOptions.builder()
+                    .setBaseOptions(baseOptions)
+                    .setMaxResults(MAX_DETECTIONS)
+                    .setScoreThreshold(CONFIDENCE_THRESHOLD)
+                    .build()
+                objectDetector = ObjectDetector.createFromOptions(context, options)
+                Log.d(TAG, "Object detector re-initialized successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to re-initialize object detector", e)
+            }
+        }
+        if (faceProcessor == null) {
+            lastReinitAttempt = now
+            try {
+                faceProcessor = FaceProcessor(context)
+                Log.d(TAG, "Face processor re-initialized successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to re-initialize face processor", e)
+            }
+        }
+    }
+
+    /**
+     * Process an external frame (e.g. from browser camera upload).
+     * Returns detection results as a list of maps for JSON serialization.
+     */
+    fun processExternalFrame(bitmap: Bitmap): List<Map<String, Any>> {
+        val detectedObjects = mutableListOf<DetectedObject>()
+        val timestamp = System.currentTimeMillis()
+
+        objectDetector?.let { detector ->
+            try {
+                val mpImage = BitmapImageBuilder(bitmap).build()
+                val results = detector.detect(mpImage)
+                processObjectDetectionResults(results, bitmap, detectedObjects, timestamp)
+            } catch (e: Exception) {
+                Log.e(TAG, "External frame detection failed", e)
+            }
+        }
+
+        return detectedObjects.map { obj ->
+            mapOf(
+                "type" to when (obj.type) {
+                    ObjectType.PERSON -> "person"
+                    ObjectType.VEHICLE -> obj.vehicleType ?: "vehicle"
+                },
+                "confidence" to obj.confidence,
+                "bbox" to mapOf(
+                    "left" to obj.boundingBox.left,
+                    "top" to obj.boundingBox.top,
+                    "right" to obj.boundingBox.right,
+                    "bottom" to obj.boundingBox.bottom
+                ),
+                "licensePlate" to (obj.licensePlate ?: ""),
+                "hasFace" to (obj.faceEmbedding != null)
+            )
+        }
     }
 
     private fun updateUI(detections: List<DetectedObject>, width: Int, height: Int, inferenceTime: Long) {
@@ -106,7 +210,6 @@ class DetectionPipeline(
                 },
                 confidence = obj.confidence,
                 boundingBox = obj.boundingBox
-                // trackId is assigned by the tracker, not available on DetectedObject
             )
         }
 
@@ -123,16 +226,6 @@ class DetectionPipeline(
             DetectionEventManager.updateStats(fps, inferenceTime)
             frameCount = 0
             lastFpsUpdate = now
-        }
-
-        // Emit new detection events for activity feed
-        uiScope.launch {
-            for (detection in uiDetections) {
-                if (detection.trackId >= 0) {
-                    // Only emit for new tracks (this is simplified - in production
-                    // you'd track which IDs have already been announced)
-                }
-            }
         }
     }
 
@@ -164,13 +257,19 @@ class DetectionPipeline(
                         timestamp = timestamp
                     )
 
-                    // Try to detect face and generate embedding
-                    faceProcessor?.let { fp ->
-                        val faceBitmap = cropBitmap(bitmap, rectF)
-                        val faceResult = fp.processFace(faceBitmap)
-                        if (faceResult != null) {
-                            obj.faceEmbedding = faceResult.embedding
-                            obj.faceConfidence = faceResult.confidence
+                    // Face processing every 3rd frame to save CPU/memory
+                    if (detectionFrameCount % 3 == 0) {
+                        faceProcessor?.let { fp ->
+                            val faceBitmap = cropBitmap(bitmap, rectF)
+                            try {
+                                val faceResult = fp.processFace(faceBitmap)
+                                if (faceResult != null) {
+                                    obj.faceEmbedding = faceResult.embedding
+                                    obj.faceConfidence = faceResult.confidence
+                                }
+                            } finally {
+                                faceBitmap.recycle()
+                            }
                         }
                     }
 
@@ -186,13 +285,28 @@ class DetectionPipeline(
                         vehicleType = label
                     )
 
-                    // Try to read license plate
-                    plateReader?.let { pr ->
-                        val vehicleBitmap = cropBitmap(bitmap, rectF)
-                        obj.licensePlate = pr.readPlate(vehicleBitmap)
-                    }
-
                     detectedObjects.add(obj)
+
+                    // Async plate reading — fire-and-forget to avoid blocking detection thread
+                    if (rectF.width() > 100f) {
+                        plateReader?.let { pr ->
+                            val vehicleBitmap = cropBitmap(bitmap, rectF)
+                            val trackId = obj.hashCode() // will be updated after tracker assigns real ID
+                            ioScope.launch {
+                                try {
+                                    val plate = withTimeoutOrNull(2000L) { pr.readPlateAsync(vehicleBitmap) }
+                                    if (plate != null) {
+                                        // Update tracker directly with async result
+                                        tracker.updatePlate(trackId, plate)
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Async plate read failed", e)
+                                } finally {
+                                    vehicleBitmap.recycle()
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -211,6 +325,7 @@ class DetectionPipeline(
         objectDetector?.close()
         faceProcessor?.close()
         plateReader?.close()
+        _currentFrameBytes.value = null
     }
 
     companion object {

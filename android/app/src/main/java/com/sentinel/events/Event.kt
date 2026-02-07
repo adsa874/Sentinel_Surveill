@@ -21,5 +21,6 @@ data class Event(
     val duration: Long = 0,
     val confidence: Float = 0f,
     val metadata: Map<String, String> = emptyMap(),
-    val synced: Boolean = false
+    val synced: Boolean = false,
+    val snapshotPath: String? = null
 )

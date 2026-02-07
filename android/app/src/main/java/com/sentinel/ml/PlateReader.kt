@@ -8,6 +8,7 @@ import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.TextRecognizer
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 
 class PlateReader(private val context: Context) {
@@ -15,8 +16,10 @@ class PlateReader(private val context: Context) {
         TextRecognizerOptions.DEFAULT_OPTIONS
     )
 
-    // Common license plate patterns
+    // License plate patterns ordered by priority (Indian first)
     private val platePatterns = listOf(
+        // Indian pattern: XX 00 XX 0000 (e.g., MH 12 AB 1234, KA 01 A 1234)
+        Regex("[A-Z]{2}[- ]?\\d{2}[- ]?[A-Z]{1,2}[- ]?\\d{4}"),
         // US patterns
         Regex("[A-Z]{1,3}[- ]?\\d{1,4}[- ]?[A-Z]{0,3}"),
         Regex("\\d{1,3}[- ]?[A-Z]{1,3}[- ]?\\d{1,4}"),
@@ -26,44 +29,38 @@ class PlateReader(private val context: Context) {
         Regex("[A-Z0-9]{5,8}")
     )
 
-    fun readPlate(bitmap: Bitmap): String? {
-        return try {
-            val inputImage = InputImage.fromBitmap(bitmap, 0)
-            var plateText: String? = null
+    // Character substitutions for OCR correction (only applied as fallback)
+    private val ocrSubstitutions = mapOf(
+        'O' to '0',
+        'I' to '1',
+        'S' to '5'
+    )
 
-            textRecognizer.process(inputImage)
-                .addOnSuccessListener { result ->
-                    val allText = result.text.uppercase()
-                        .replace("O", "0")
-                        .replace("I", "1")
-                        .replace("S", "5")
-                        .replace(" ", "")
-
-                    // Try to match license plate patterns
-                    plateText = extractPlateNumber(allText)
-                }
-                .addOnFailureListener { e ->
-                    Log.e(TAG, "Text recognition failed", e)
-                }
-
-            plateText
-        } catch (e: Exception) {
-            Log.e(TAG, "Plate reading failed", e)
-            null
-        }
-    }
-
-    suspend fun readPlateAsync(bitmap: Bitmap): String? = suspendCancellableCoroutine { cont ->
+    suspend fun readPlateAsync(bitmap: Bitmap): String? = withTimeoutOrNull(3000L) {
+        suspendCancellableCoroutine { cont ->
         try {
             val inputImage = InputImage.fromBitmap(bitmap, 0)
 
             textRecognizer.process(inputImage)
                 .addOnSuccessListener { result ->
-                    val allText = result.text.uppercase()
+                    val rawText = result.text.uppercase()
                         .replace(" ", "")
                         .replace("\n", "")
 
-                    val plateText = extractPlateNumber(allText)
+                    // First try matching on raw text (preserves letters like O, I, S)
+                    var plateText = extractPlateNumber(rawText)
+
+                    // If no match, try with OCR substitutions
+                    if (plateText == null) {
+                        val correctedText = rawText.map { ch ->
+                            ocrSubstitutions[ch] ?: ch
+                        }.joinToString("")
+                        plateText = extractPlateNumber(correctedText)
+                    }
+
+                    if (plateText != null) {
+                        Log.d(TAG, "Plate detected: $plateText")
+                    }
                     cont.resume(plateText)
                 }
                 .addOnFailureListener { e ->
@@ -75,19 +72,17 @@ class PlateReader(private val context: Context) {
             cont.resume(null)
         }
     }
+    }
 
     private fun extractPlateNumber(text: String): String? {
-        // Clean up text
         val cleanedText = text
             .uppercase()
             .filter { it.isLetterOrDigit() || it == '-' }
 
-        // Try each pattern
         for (pattern in platePatterns) {
             val match = pattern.find(cleanedText)
             if (match != null) {
                 val candidate = match.value
-                // Validate: should have at least 2 letters and 2 numbers
                 val hasLetters = candidate.count { it.isLetter() } >= 2
                 val hasNumbers = candidate.count { it.isDigit() } >= 2
                 val goodLength = candidate.length in 5..10

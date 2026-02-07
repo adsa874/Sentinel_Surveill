@@ -1,9 +1,12 @@
 package com.sentinel.network
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKeys
 import com.sentinel.data.AppDatabase
 import com.sentinel.data.entities.EmployeeEntity
 import kotlinx.coroutines.Dispatchers
@@ -11,13 +14,29 @@ import kotlinx.coroutines.withContext
 
 class SyncManager(private val context: Context) {
     private val database = AppDatabase.getInstance(context)
-    private val prefs = context.getSharedPreferences("sentinel_prefs", Context.MODE_PRIVATE)
+    private val prefs: SharedPreferences = createEncryptedPrefs()
 
     private val deviceId: String
         get() = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
 
     private val apiKey: String?
         get() = prefs.getString(PREF_API_KEY, null)
+
+    private fun createEncryptedPrefs(): SharedPreferences {
+        return try {
+            val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+            EncryptedSharedPreferences.create(
+                "sentinel_secure_prefs",
+                masterKeyAlias,
+                context,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create encrypted prefs, falling back to regular prefs", e)
+            context.getSharedPreferences("sentinel_prefs", Context.MODE_PRIVATE)
+        }
+    }
 
     suspend fun registerDevice(): Boolean = withContext(Dispatchers.IO) {
         try {

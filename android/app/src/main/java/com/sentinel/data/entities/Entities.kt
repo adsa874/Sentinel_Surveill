@@ -1,6 +1,7 @@
 package com.sentinel.data.entities
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
@@ -37,7 +38,14 @@ class Converters {
     }
 }
 
-@Entity(tableName = "events")
+@Entity(
+    tableName = "events",
+    indices = [
+        Index(value = ["timestamp"]),
+        Index(value = ["synced"]),
+        Index(value = ["trackId"])
+    ]
+)
 data class EventEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -48,10 +56,17 @@ data class EventEntity(
     val licensePlate: String? = null,
     val duration: Long = 0,
     val confidence: Float = 0f,
-    val synced: Boolean = false
+    val synced: Boolean = false,
+    val snapshotPath: String? = null
 )
 
-@Entity(tableName = "persons")
+@Entity(
+    tableName = "persons",
+    indices = [
+        Index(value = ["trackId"]),
+        Index(value = ["employeeId"])
+    ]
+)
 data class PersonEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -93,7 +108,12 @@ data class EmployeeEntity(
     override fun hashCode(): Int = employeeId.hashCode()
 }
 
-@Entity(tableName = "vehicles")
+@Entity(
+    tableName = "vehicles",
+    indices = [
+        Index(value = ["licensePlate"])
+    ]
+)
 data class VehicleEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
@@ -104,7 +124,12 @@ data class VehicleEntity(
     val ownerId: String? = null
 )
 
-@Entity(tableName = "attendance")
+@Entity(
+    tableName = "attendance",
+    indices = [
+        Index(value = ["employeeId", "date"])
+    ]
+)
 data class AttendanceEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,

@@ -1,5 +1,6 @@
 package com.sentinel.events
 
+import android.content.Context
 import android.util.Log
 import com.sentinel.data.AppDatabase
 import com.sentinel.data.entities.EventEntity
@@ -12,18 +13,26 @@ import com.sentinel.ui.DetectionEventManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
 
 class EventEngine(
     private val database: AppDatabase,
-    private val scope: CoroutineScope
+    private val scope: CoroutineScope,
+    private val context: Context? = null
 ) {
-    private val processedTracks = ConcurrentHashMap<Int, TrackState>()
+    private val processedTracks = ConcurrentHashMap<Int, Pair<TrackState, Long>>()
     private val eventQueue = mutableListOf<Event>()
     private var lastSyncTime = 0L
+    private var lastPruneTime = 0L
 
-    // Known employee embeddings (loaded from database)
-    private val employeeEmbeddings = mutableMapOf<String, FloatArray>()
+    // Known employee embeddings (loaded from database) — ConcurrentHashMap for thread safety
+    private val employeeEmbeddings = ConcurrentHashMap<String, FloatArray>()
+
+    // Current frame JPEG bytes for evidence capture (volatile for cross-thread visibility)
+    @Volatile
+    private var currentFrameJpeg: ByteArray? = null
 
     init {
         loadEmployeeEmbeddings()
@@ -45,9 +54,14 @@ class EventEngine(
         }
     }
 
+    fun setCurrentFrameJpeg(bytes: ByteArray?) {
+        currentFrameJpeg = bytes
+    }
+
     fun processTrackedObjects(trackedObjects: List<TrackedObject>, timestamp: Long) {
         for (obj in trackedObjects) {
-            val previousState = processedTracks[obj.trackId]
+            val previous = processedTracks[obj.trackId]
+            val previousState = previous?.first
 
             when {
                 // New track - generate entry event
@@ -68,7 +82,7 @@ class EventEngine(
                 }
             }
 
-            processedTracks[obj.trackId] = obj.state
+            processedTracks[obj.trackId] = Pair(obj.state, timestamp)
         }
 
         // Cleanup old processed tracks
@@ -78,6 +92,12 @@ class EventEngine(
         if (timestamp - lastSyncTime > SYNC_INTERVAL) {
             syncEvents()
             lastSyncTime = timestamp
+        }
+
+        // Daily pruning of old synced events
+        if (timestamp - lastPruneTime > PRUNE_INTERVAL) {
+            pruneOldEvents()
+            lastPruneTime = timestamp
         }
     }
 
@@ -96,24 +116,32 @@ class EventEngine(
                     EventType.PERSON_ENTERED
                 }
 
+                val snapshotPath = if (eventType in HIGH_PRIORITY_EVENTS) {
+                    saveSnapshot(timestamp)
+                } else null
+
                 queueEvent(
                     Event(
                         type = eventType,
                         timestamp = timestamp,
                         trackId = obj.trackId,
-                        employeeId = employeeId
+                        employeeId = employeeId,
+                        snapshotPath = snapshotPath
                     )
                 )
             }
 
             ObjectType.VEHICLE -> {
+                val snapshotPath = saveSnapshot(timestamp)
+
                 queueEvent(
                     Event(
                         type = EventType.VEHICLE_ENTERED,
                         timestamp = timestamp,
                         trackId = obj.trackId,
                         licensePlate = obj.licensePlate,
-                        metadata = mapOf("vehicleType" to (obj.vehicleType ?: "unknown"))
+                        metadata = mapOf("vehicleType" to (obj.vehicleType ?: "unknown")),
+                        snapshotPath = snapshotPath
                     )
                 )
             }
@@ -156,19 +184,55 @@ class EventEngine(
 
     private fun handleLoitering(obj: TrackedObject, timestamp: Long) {
         // Only generate loitering event once per track
-        val key = "loitering_${obj.trackId}"
-        if (processedTracks.containsKey(key.hashCode())) return
+        val key = "loitering_${obj.trackId}".hashCode()
+        if (processedTracks.containsKey(key)) return
+
+        val snapshotPath = saveSnapshot(timestamp)
 
         queueEvent(
             Event(
                 type = EventType.LOITERING_DETECTED,
                 timestamp = timestamp,
                 trackId = obj.trackId,
-                duration = obj.duration
+                duration = obj.duration,
+                snapshotPath = snapshotPath
             )
         )
 
-        processedTracks[key.hashCode()] = TrackState.TRACKED
+        processedTracks[key] = Pair(TrackState.TRACKED, timestamp)
+    }
+
+    private fun saveSnapshot(timestamp: Long): String? {
+        val jpegBytes = currentFrameJpeg ?: return null
+        val ctx = context ?: return null
+
+        return try {
+            val snapshotDir = File(ctx.filesDir, "snapshots")
+            if (!snapshotDir.exists()) snapshotDir.mkdirs()
+
+            // Enforce snapshot limit
+            enforceSnapshotLimit(snapshotDir)
+
+            val file = File(snapshotDir, "event_${timestamp}.jpg")
+            FileOutputStream(file).use { out ->
+                out.write(jpegBytes)
+            }
+            Log.d(TAG, "Snapshot saved: ${file.absolutePath}")
+            file.absolutePath
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save snapshot", e)
+            null
+        }
+    }
+
+    private fun enforceSnapshotLimit(snapshotDir: File) {
+        val files = snapshotDir.listFiles()?.sortedBy { it.lastModified() } ?: return
+        if (files.size >= MAX_SNAPSHOTS) {
+            val toDelete = files.take(files.size - MAX_SNAPSHOTS + 1)
+            for (file in toDelete) {
+                file.delete()
+            }
+        }
     }
 
     private fun matchEmployee(embedding: FloatArray): String? {
@@ -272,7 +336,8 @@ class EventEngine(
                         employeeId = event.employeeId,
                         licensePlate = event.licensePlate,
                         duration = event.duration,
-                        synced = false
+                        synced = false,
+                        snapshotPath = event.snapshotPath
                     )
                 }
                 database.eventDao().insertAll(entities)
@@ -283,10 +348,23 @@ class EventEngine(
         }
     }
 
+    private fun pruneOldEvents() {
+        scope.launch(Dispatchers.IO) {
+            try {
+                val sevenDaysAgo = System.currentTimeMillis() - 7 * 24 * 60 * 60 * 1000L
+                database.eventDao().deleteSyncedEventsBefore(sevenDaysAgo)
+                Log.d(TAG, "Pruned old synced events")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to prune old events", e)
+            }
+        }
+    }
+
     private fun cleanupOldTracks() {
-        // Remove tracks that haven't been seen in a while
-        val staleKeys = processedTracks.filter { (_, state) ->
-            state == TrackState.EXITED
+        val now = System.currentTimeMillis()
+        val staleThreshold = 30 * 60 * 1000L // 30 minutes
+        val staleKeys = processedTracks.filter { (_, pair) ->
+            pair.first == TrackState.EXITED || (now - pair.second > staleThreshold)
         }.keys
         staleKeys.forEach { processedTracks.remove(it) }
     }
@@ -299,5 +377,14 @@ class EventEngine(
         private const val TAG = "EventEngine"
         private const val LOITERING_THRESHOLD = 300_000L // 5 minutes
         private const val SYNC_INTERVAL = 5_000L // 5 seconds
+        private const val PRUNE_INTERVAL = 24 * 60 * 60 * 1000L // 24 hours
+        private const val MAX_SNAPSHOTS = 500
+
+        private val HIGH_PRIORITY_EVENTS = setOf(
+            EventType.EMPLOYEE_ARRIVED,
+            EventType.UNKNOWN_FACE_DETECTED,
+            EventType.LOITERING_DETECTED,
+            EventType.VEHICLE_ENTERED
+        )
     }
 }

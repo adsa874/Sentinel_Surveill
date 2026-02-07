@@ -5,9 +5,13 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
-import com.google.mediapipe.tasks.vision.facedetector.FaceDetector
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import org.tensorflow.lite.Interpreter
+import java.io.FileInputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.nio.MappedByteBuffer
+import java.nio.channels.FileChannel
 import kotlin.math.sqrt
 
 data class FaceResult(
@@ -29,8 +33,17 @@ data class FaceResult(
 }
 
 class FaceProcessor(private val context: Context) {
-    private var faceDetector: FaceDetector? = null
     private var faceLandmarker: FaceLandmarker? = null
+    private var tfliteInterpreter: Interpreter? = null
+
+    // Reusable input buffer to avoid allocating 150KB every call
+    private val inputBuffer: ByteBuffer = ByteBuffer.allocateDirect(1 * INPUT_SIZE * INPUT_SIZE * 3 * 4).apply {
+        order(ByteOrder.nativeOrder())
+    }
+
+    // Reusable pixel array and output buffer to avoid 50KB allocation per face per frame
+    private val reusablePixels = IntArray(INPUT_SIZE * INPUT_SIZE)
+    private val reusableOutput = Array(1) { FloatArray(EMBEDDING_SIZE) }
 
     init {
         initializeDetectors()
@@ -38,23 +51,7 @@ class FaceProcessor(private val context: Context) {
 
     private fun initializeDetectors() {
         try {
-            // Initialize Face Detector
-            val detectorOptions = FaceDetector.FaceDetectorOptions.builder()
-                .setBaseOptions(
-                    BaseOptions.builder()
-                        .setModelAssetPath("blaze_face_short_range.tflite")
-                        .build()
-                )
-                .setMinDetectionConfidence(MIN_FACE_CONFIDENCE)
-                .build()
-
-            faceDetector = FaceDetector.createFromOptions(context, detectorOptions)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to initialize face detector", e)
-        }
-
-        try {
-            // Initialize Face Landmarker for embeddings
+            // Initialize Face Landmarker for face DETECTION (cropping)
             val landmarkerOptions = FaceLandmarker.FaceLandmarkerOptions.builder()
                 .setBaseOptions(
                     BaseOptions.builder()
@@ -68,21 +65,49 @@ class FaceProcessor(private val context: Context) {
                 .build()
 
             faceLandmarker = FaceLandmarker.createFromOptions(context, landmarkerOptions)
+            Log.d(TAG, "Face landmarker initialized")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to initialize face landmarker", e)
+        }
+
+        try {
+            // Initialize MobileFaceNet TFLite interpreter for EMBEDDING generation
+            val model = loadModelFile("mobilefacenet.tflite")
+            val options = Interpreter.Options().apply {
+                setNumThreads(2)
+            }
+            tfliteInterpreter = Interpreter(model, options)
+            Log.d(TAG, "MobileFaceNet interpreter initialized")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to initialize MobileFaceNet interpreter", e)
+        }
+    }
+
+    private fun loadModelFile(modelName: String): MappedByteBuffer {
+        return context.assets.openFd(modelName).use { fileDescriptor ->
+            FileInputStream(fileDescriptor.fileDescriptor).use { inputStream ->
+                val fileChannel = inputStream.channel
+                fileChannel.map(
+                    FileChannel.MapMode.READ_ONLY,
+                    fileDescriptor.startOffset,
+                    fileDescriptor.declaredLength
+                )
+            }
         }
     }
 
     fun processFace(bitmap: Bitmap): FaceResult? {
         val landmarker = faceLandmarker ?: return null
+        val interpreter = tfliteInterpreter ?: return null
 
         return try {
             val mpImage = BitmapImageBuilder(bitmap).build()
             val result = landmarker.detect(mpImage)
 
             if (result.faceLandmarks().isNotEmpty()) {
-                val embedding = generateEmbedding(result)
                 val confidence = calculateConfidence(result)
+                val embedding = generateMobileFaceNetEmbedding(bitmap, interpreter)
+                Log.d(TAG, "Face embedding generated: ${embedding.size}-dim")
                 FaceResult(embedding, confidence)
             } else {
                 null
@@ -93,35 +118,31 @@ class FaceProcessor(private val context: Context) {
         }
     }
 
-    private fun generateEmbedding(result: FaceLandmarkerResult): FloatArray {
-        // Generate a simple embedding from face landmarks
-        // Uses key facial landmarks to create a normalized feature vector
-        val landmarks = result.faceLandmarks().firstOrNull() ?: return FloatArray(EMBEDDING_SIZE)
+    private fun generateMobileFaceNetEmbedding(faceBitmap: Bitmap, interpreter: Interpreter): FloatArray {
+        // Resize face crop to 112x112 (MobileFaceNet input)
+        val resized = Bitmap.createScaledBitmap(faceBitmap, INPUT_SIZE, INPUT_SIZE, true)
 
-        val embedding = FloatArray(EMBEDDING_SIZE)
-        val keyPoints = listOf(
-            // Eyes
-            33, 133, 362, 263,  // Left/right eye corners
-            159, 145, 386, 374, // Eye top/bottom
-            // Nose
-            1, 2, 98, 327,
-            // Mouth
-            61, 291, 0, 17,
-            // Face contour
-            234, 454, 10, 152
-        )
+        // Prepare input: normalize pixel values (pixel - 127.5) / 128.0
+        inputBuffer.clear()
 
-        var idx = 0
-        for (i in keyPoints.indices) {
-            if (i >= landmarks.size) break
-            val point = landmarks[keyPoints[i].coerceIn(0, landmarks.size - 1)]
-            embedding[idx++] = point.x()
-            embedding[idx++] = point.y()
-            embedding[idx++] = point.z()
-            if (idx >= EMBEDDING_SIZE) break
+        resized.getPixels(reusablePixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
+        resized.recycle()
+
+        for (pixel in reusablePixels) {
+            val r = ((pixel shr 16) and 0xFF).toFloat()
+            val g = ((pixel shr 8) and 0xFF).toFloat()
+            val b = (pixel and 0xFF).toFloat()
+            inputBuffer.putFloat((r - 127.5f) / 128.0f)
+            inputBuffer.putFloat((g - 127.5f) / 128.0f)
+            inputBuffer.putFloat((b - 127.5f) / 128.0f)
         }
 
-        // Normalize embedding
+        // Run inference into reusable output buffer
+        inputBuffer.rewind()
+        interpreter.run(inputBuffer, reusableOutput)
+
+        // L2 normalize the embedding
+        val embedding = reusableOutput[0]
         val norm = sqrt(embedding.map { it * it }.sum())
         if (norm > 0) {
             for (i in embedding.indices) {
@@ -132,8 +153,7 @@ class FaceProcessor(private val context: Context) {
         return embedding
     }
 
-    private fun calculateConfidence(result: FaceLandmarkerResult): Float {
-        // Use presence confidence if available
+    private fun calculateConfidence(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult): Float {
         val blendshapes = result.faceBlendshapes()
         return if (blendshapes.isPresent && blendshapes.get().isNotEmpty()) {
             blendshapes.get().firstOrNull()?.firstOrNull()?.score() ?: 0.8f
@@ -148,7 +168,8 @@ class FaceProcessor(private val context: Context) {
         var norm1 = 0f
         var norm2 = 0f
 
-        for (i in embedding1.indices) {
+        val minSize = minOf(embedding1.size, embedding2.size)
+        for (i in 0 until minSize) {
             dotProduct += embedding1[i] * embedding2[i]
             norm1 += embedding1[i] * embedding1[i]
             norm2 += embedding2[i] * embedding2[i]
@@ -159,15 +180,16 @@ class FaceProcessor(private val context: Context) {
     }
 
     fun close() {
-        faceDetector?.close()
         faceLandmarker?.close()
+        tfliteInterpreter?.close()
     }
 
     companion object {
         private const val TAG = "FaceProcessor"
         private const val MIN_FACE_CONFIDENCE = 0.5f
         private const val MIN_TRACKING_CONFIDENCE = 0.5f
-        const val EMBEDDING_SIZE = 128
+        private const val INPUT_SIZE = 112
+        const val EMBEDDING_SIZE = 192
         const val MATCH_THRESHOLD = 0.7f
     }
 }

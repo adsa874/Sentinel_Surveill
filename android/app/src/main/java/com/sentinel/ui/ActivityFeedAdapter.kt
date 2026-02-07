@@ -41,9 +41,14 @@ class ActivityFeedAdapter : ListAdapter<ActivityEvent, ActivityFeedAdapter.ViewH
                 tvConfidence.visibility = View.GONE
             }
 
-            if (event.thumbnail != null) {
+            if (event.snapshotPath != null) {
                 ivThumbnail.visibility = View.VISIBLE
-                ivThumbnail.setImageBitmap(event.thumbnail)
+                try {
+                    val bitmap = android.graphics.BitmapFactory.decodeFile(event.snapshotPath)
+                    ivThumbnail.setImageBitmap(bitmap)
+                } catch (e: Exception) {
+                    ivThumbnail.visibility = View.GONE
+                }
             } else {
                 ivThumbnail.visibility = View.GONE
             }
